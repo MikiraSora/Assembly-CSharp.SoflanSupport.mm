@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Assembly-CSharp.SoflanSupport.mm</AssemblyName>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- 输出整洁: 仅产出 patch .mm.dll 自身, 不拷贝目标/Unity/System/MonoMod 等传递依赖 -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <NoWarn>$(NoWarn);CS0626;CS0108;CS0114;CS0414;CS0169</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 目标程序集(真实, 非公开化). 仅编译期引用, 不拷贝 -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- 外部依赖: 提供 OngekiFumenEditor.Core.* 命名空间. 运行时需部署到 Managed -->
+    <Reference Include="SimpleSoflanFramework.Core">
+      <HintPath>C:\Users\mikir\source\repos\SimpleSoflanFramework\SimpleSoflanFramework.Core\bin\Debug\SimpleSoflanFramework.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Unity 运行时类型 -->
+    <Reference Include="UnityEngine">
+      <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- MonoMod: 引用 BepInEx 随附的经典 MonoMod (v20.5.21.5, 与游戏运行时一致),
+         而非 NuGet MonoMod.Patcher 25.0.1, 避免 .mm.dll 的 MonoMod AssemblyRef 与运行时版本错配.
+         MonoModRules.cs 用 Cecil API 做 IL 插入, 故一并引用 BepInEx 的 Mono.Cecil 0.10.4. -->
+    <Reference Include="MonoMod">
+      <HintPath>F:\SDEZ_165\Package\BepInEx\core\MonoMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>F:\SDEZ_165\Package\BepInEx\core\MonoMod.Utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>F:\SDEZ_165\Package\BepInEx\core\Mono.Cecil.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Pdb">
+      <HintPath>F:\SDEZ_165\Package\BepInEx\core\Mono.Cecil.Pdb.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Mdb">
+      <HintPath>F:\SDEZ_165\Package\BepInEx\core\Mono.Cecil.Mdb.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
