@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soflan Y Position Simulator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <input type="text" id="file-path" placeholder="ma2 file path..." class="file-input">
+    <button id="load-btn">Load</button>
+    <span class="sep"></span>
+    <label>DefaultMsec <input type="number" id="p-default-msec" value="2000" step="100"></label>
+    <label>MaiBugAdj <input type="number" id="p-mai-bug-adjust" value="0" step="10"></label>
+    <label>StartPos <input type="number" id="p-start-pos" value="120" step="10"></label>
+    <label>EndPos <input type="number" id="p-end-pos" value="400" step="10"></label>
+    <label>NoteSpeed <input type="number" id="p-note-speed" value="150" step="10"></label>
+    <label>Step(ms) <input type="number" id="p-step" value="16" step="1"></label>
+  </div>
+  <div id="status"></div>
+  <div id="global-section">
+    <div class="section-label">Global View</div>
+    <canvas id="global-canvas"></canvas>
+  </div>
+  <div id="detail-section">
+    <div class="section-label">Detail View <span id="detail-note-label"></span></div>
+    <canvas id="detail-canvas"></canvas>
+    <div id="values-table"></div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

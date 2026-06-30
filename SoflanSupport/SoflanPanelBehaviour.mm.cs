@@ -12,6 +12,7 @@
 using System.Collections.Generic;
 using MAI2.Util;
 using Manager;
+using Monitor;
 using UnityEngine;
 
 namespace SoflanSupport
@@ -29,6 +30,35 @@ namespace SoflanSupport
 
         // 复用的 group 倍率缓冲 (避免每帧 new List)
         private readonly List<SoflanManager.GroupSpeed> _allSpeeds = new List<SoflanManager.GroupSpeed>();
+
+        // --- 右键选中 Tap ---
+        // 选中 note 的计算数据 (由 patch_NoteBase.GetNoteYPosition_soflan 在 IsSelected 时写入).
+        public struct SelectedNoteData
+        {
+            public int NoteIndex;
+            public double DiffTime, AbsDiffTime;
+            public float ScaleStartTime, MoveStartTime, MoveProgress, FinalScale;
+            public float InsideY, OutsideY, SoflanY, ClipedSoflanY;
+            public NoteBase.NoteStatus NoteStat;
+        }
+        public static SelectedNoteData SelectedData;
+        public static bool HasSelectedData;
+
+        // 选中状态集中维护 (避免在 NoteBase 上新增字段导致跨类编译期鸿沟).
+        private static NoteBase _selectedNote;
+        private static int _cycleIndex;
+        private static int _lastHitCount;
+
+        // patch_NoteBase 查询本实例是否被选中.
+        public static bool IsNoteSelected(NoteBase nb) => _selectedNote == nb;
+        // note 池化复用时 (Initialize) 清除: 若本实例曾被选中则取消选中.
+        public static void OnNoteReinitialized(NoteBase nb) { if (_selectedNote == nb) _selectedNote = null; }
+        // 被选中的 note 进入 EndNote 时调用: 清选中 + 清面板显示数据.
+        public static void OnSelectedNoteEnded()
+        {
+            _selectedNote = null;
+            HasSelectedData = false;
+        }
 
         private void Update()
         {
@@ -61,6 +91,44 @@ namespace SoflanSupport
                 _hasData = false;
                 _speed0 = 1.0;
             }
+
+            // 右键点击选中 Tap (不干扰左键触摸判定)
+            if (Input.GetMouseButtonDown(1))
+                HandleSelectClick();
+        }
+
+        // 右键: 把鼠标屏幕坐标转到 note 平面 (z=-6) 的世界 XY, 用 Physics2D.OverlapPointAll 命中
+        // 带 BoxCollider2D 的 Tap 视觉物件, 过滤出 NoteBase, 按 GetInstanceID 稳定排序后循环选择.
+        // 多个 Tap 重叠时, 每次右键在命中列表里取下一个 (依次选择).
+        private static void HandleSelectClick()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            var ray = cam.ScreenPointToRay(Input.mousePosition);
+            const float noteZ = -6f;  // note 平面 z (GetBaseZPosition ≈ -6)
+            if (Mathf.Approximately(ray.direction.z, 0f)) return;
+            float t = (noteZ - ray.origin.z) / ray.direction.z;
+            if (t < 0f) return;
+            Vector2 world2d = new Vector2(ray.origin.x + ray.direction.x * t, ray.origin.y + ray.direction.y * t);
+
+            var hits = Physics2D.OverlapPointAll(world2d);
+            var notes = new List<NoteBase>();
+            foreach (var c in hits)
+            {
+                var nb = c.GetComponentInParent<NoteBase>();
+                if (nb != null) notes.Add(nb);
+            }
+            if (notes.Count == 0) return;
+            notes.Sort((a, b) => a.GetInstanceID().CompareTo(b.GetInstanceID()));
+
+            // 命中集合数量变 → 从头选; 否则循环到下一个 (依次选择重叠 note).
+            if (notes.Count != _lastHitCount) _cycleIndex = 0;
+            else _cycleIndex = (_cycleIndex + 1) % notes.Count;
+            _lastHitCount = notes.Count;
+
+            // 仅切换 _selectedNote; 旧 note 的呼吸色由其 NoteCheck 检测 IsNoteSelected==false 后自动恢复.
+            _selectedNote = notes[_cycleIndex];
+            HasSelectedData = false;  // 清旧数据, 等 GetNoteYPosition_soflan 重新填充
         }
 
         private void OnGUI()
@@ -76,7 +144,7 @@ namespace SoflanSupport
 
             // 右上角: x = 屏幕宽 - 面板宽 - 右边距 10
             float panelW = 300f;
-            GUILayout.BeginArea(new Rect(Screen.width - panelW - 10f, 10f, panelW, 220f), "Soflan Monitor (F8)", GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - panelW - 10f, 10f, panelW, 400f), "Soflan Monitor (F8 | 右键选Tap)", GUI.skin.box);
             GUILayout.Label($"PlayTime: {_msec:F1} ms  ({timeStr})");
             GUILayout.Label($"SoflanGroup0 Speed: {_speed0:F3}x" + (_hasData ? "" : " (no data)"));
             GUILayout.Label($"FPS: {_fps:F1}");
@@ -85,6 +153,18 @@ namespace SoflanSupport
             {
                 foreach (var kv in _allSpeeds)
                     GUILayout.Label($"  group{kv.Group}: {kv.Speed:F3}x");
+            }
+
+            if (HasSelectedData)
+            {
+                var d = SelectedData;
+                GUILayout.Label($"--- Selected Tap (右键循环切换) ---");
+                GUILayout.Label($"NoteIndex: {d.NoteIndex}  NoteStat: {d.NoteStat}");
+                GUILayout.Label($"diffTime: {d.DiffTime:F3}  absDiffTime: {d.AbsDiffTime:F3}");
+                GUILayout.Label($"scaleStartTime: {d.ScaleStartTime:F3}  moveStartTime: {d.MoveStartTime:F3}");
+                GUILayout.Label($"moveProgress: {d.MoveProgress:F3}  finalScale: {d.FinalScale:F3}");
+                GUILayout.Label($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
+                GUILayout.Label($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
             }
             GUILayout.EndArea();
         }

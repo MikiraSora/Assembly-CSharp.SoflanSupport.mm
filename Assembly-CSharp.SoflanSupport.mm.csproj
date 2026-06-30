@@ -12,6 +12,14 @@
     <NoWarn>$(NoWarn);CS0626;CS0108;CS0114;CS0414;CS0169</NoWarn>
   </PropertyGroup>
 
+  <!-- SoflanSimulator/ 是独立可执行子项目 (自有 .csproj), 不属于本 patch; 排除其源码/csproj/产物,
+       避免 SDK 递归纳入编译, 也避免其 bin 产物触发 MSBuild 程序集统一劫持 patch 引用版本. -->
+  <ItemGroup>
+    <Compile Remove="SoflanSimulator\**\*.cs" />
+    <None Remove="SoflanSimulator\**" />
+    <ProjectReference Remove="SoflanSimulator\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- 目标程序集(真实, 非公开化). 仅编译期引用, 不拷贝 -->
     <Reference Include="Assembly-CSharp">
@@ -35,6 +43,16 @@
     <!-- IMGUI (OnGUI/GUILayout/GUI) — 调试面板用 -->
     <Reference Include="UnityEngine.IMGUIModule">
       <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Input (GetMouseButtonDown/mousePosition) — 右键选 note 用 -->
+    <Reference Include="UnityEngine.InputModule">
+      <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.InputModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Physics2D (OverlapPointAll/BoxCollider2D) — 点击命中 note 用 -->
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.Physics2DModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- MonoMod: 引用 BepInEx 随附的经典 MonoMod (v20.5.21.5, 与游戏运行时一致),

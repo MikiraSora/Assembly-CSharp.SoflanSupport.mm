@@ -25,11 +25,21 @@ namespace Monitor
         private bool isInSoflan;
         private float noteSoflanTime;
 
+        // --- 调试面板选中 (右键点击 Tap) ---
+        // 选中状态由 SoflanPanelBehaviour._selectedNote 集中维护 (避免 patch 新增字段跨类访问的编译期鸿沟);
+        // 本类通过 SoflanPanelBehaviour.IsNoteSelected(this) 查询。
+        private Color _origSpriteColor;         // 选中前的原 sprite color, 取消选中时恢复
+        private bool _colorSaved;
+
         public extern void orig_Initialize(NoteData note);
 
         public void Initialize(NoteData note)
         {
             orig_Initialize(note);
+
+            // 池化复用时: 若本实例曾被选中, 清除选中 (避免复用实例仍标记为选中)
+            SoflanPanelBehaviour.OnNoteReinitialized(this);
+            _colorSaved = false;
 
             //Soflan Support
             soflanManager = Singleton<SoflanManager>.Instance;
@@ -63,6 +73,22 @@ namespace Monitor
                 var scale = Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
+
+            // 调试选中视觉: 选中时高亮黄 + alpha 0.5~1 呼吸; 取消选中恢复原色 (仅恢复一次).
+            if (SpriteRender != null)
+            {
+                if (SoflanPanelBehaviour.IsNoteSelected(this))
+                {
+                    if (!_colorSaved) { _origSpriteColor = SpriteRender.color; _colorSaved = true; }
+                    float a = Mathf.PingPong(Time.time * 2f, 0.5f) + 0.5f;  // 0.5~1 来回呼吸
+                    SpriteRender.color = new Color(1f, 1f, 0f, a);           // 高亮黄
+                }
+                else if (_colorSaved)
+                {
+                    SpriteRender.color = _origSpriteColor;
+                    _colorSaved = false;
+                }
+            }
         }
 
         private float GetSoflanTimeDiff()
@@ -76,6 +102,17 @@ namespace Monitor
         protected void EndNote()
         {
             orig_EndNote();
+
+            // 被选中的 note 结束时: 恢复原色 + 通知面板清选中与显示数据.
+            if (SoflanPanelBehaviour.IsNoteSelected(this))
+            {
+                if (_colorSaved && SpriteRender != null)
+                {
+                    SpriteRender.color = _origSpriteColor;
+                    _colorSaved = false;
+                }
+                SoflanPanelBehaviour.OnSelectedNoteEnded();
+            }
         }
 
         protected extern float orig_GetNoteYPosition();
@@ -124,7 +161,7 @@ namespace Monitor
             */
             var currentTime = NotesManager.GetCurrentMsec();
             var diffTime = GetSoflanTimeDiff();
-            var absDiffTime = Math.Abs(GetSoflanTimeDiff());
+            var absDiffTime = Math.Abs(diffTime);
 
             var scaleStartTime = 2 * DefaultMsec - GetMaiBugAdjustMSec();
             var moveStartTime = DefaultMsec - GetMaiBugAdjustMSec();
@@ -150,13 +187,9 @@ namespace Monitor
             }
             else
             {
-                if (NoteGuideTrans != null)
-                {
-                    GuideObj.SetAlpha(1);
-                }
+                NoteStat = NoteStatus.Move;
             }
 
-            NoteStat = NoteStatus.Move;
             var speedRatio = Singleton<GamePlayManager>.Instance
                           .GetGameScore(MonitorId)
                           .UserOption
@@ -180,10 +213,13 @@ namespace Monitor
             var adjustedGuideScale = guideScale + guideScaleAdj;
             var finalScale = 0.25f + adjustedGuideScale;
 
-            if (NoteGuideTrans != null)
+            if (NoteStat == NoteStatus.Move)
             {
-                NoteGuideTrans.localScale = new Vector3(finalScale, finalScale, 1f);
-                GuideObj.SetAlpha(1f);
+                if (NoteGuideTrans != null)
+                {
+                    NoteGuideTrans.localScale = new Vector3(finalScale, finalScale, 1f);
+                    GuideObj.SetAlpha(1);
+                }
             }
 
             /*  强制重新计算物件pos位置
@@ -201,6 +237,28 @@ namespace Monitor
             var adjustedSoflanY = soflanY + sign * offsetYAdj;
 
             var clipedSoflanY = Mathf.Clamp(adjustedSoflanY, 120, 680);
+
+            // 调试面板: 选中本 note 时, 把所有计算变量导出到面板 (struct 值类型, 零堆分配).
+            if (SoflanPanelBehaviour.IsNoteSelected(this))
+            {
+                SoflanPanelBehaviour.SelectedData = new SoflanPanelBehaviour.SelectedNoteData
+                {
+                    NoteIndex = NoteIndex,
+                    DiffTime = diffTime,
+                    AbsDiffTime = absDiffTime,
+                    ScaleStartTime = scaleStartTime,
+                    MoveStartTime = moveStartTime,
+                    NoteStat = NoteStat,
+                    MoveProgress = moveProgress,
+                    FinalScale = finalScale,
+                    InsideY = insideY,
+                    OutsideY = outsideY,
+                    SoflanY = soflanY,
+                    ClipedSoflanY = clipedSoflanY,
+                };
+                SoflanPanelBehaviour.HasSelectedData = true;
+            }
+
             return clipedSoflanY;
         }
     }
