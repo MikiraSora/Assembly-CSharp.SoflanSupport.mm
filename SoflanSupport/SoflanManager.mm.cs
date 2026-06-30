@@ -251,6 +251,36 @@ namespace SoflanSupport
             return (float)TGridCalculator.ConvertAudioTimeToY_PreviewMode(TimeSpan.FromMilliseconds(msec), getSoflanList(soflanGroup), bpmList, 1);
         }
 
+        // 调试面板用: soflan 组号 + 当前变速倍率 (值类型, 零堆分配).
+        public struct GroupSpeed
+        {
+            public readonly int Group;
+            public readonly double Speed;
+            public GroupSpeed(int group, double speed) { Group = group; Speed = speed; }
+        }
+
+        // 返回指定 soflan 组在指定音频时间(msec)的当前变速倍率。无该组或无 soflan 时返回 1.0。
+        // 面板每帧调用; 仅 TimeSpan 栈分配 + 同源计算, 无堆分配。
+        public double GetCurrentSpeed(int soflanGroup, float audioMsec)
+        {
+            if (!containSoflans) return 1.0;
+            if (!soflanListMap.ContainsKey(soflanGroup)) return 1.0;
+            var tGrid = TGridCalculator.ConvertAudioTimeToTGrid(
+                TimeSpan.FromMilliseconds(audioMsec), bpmList);
+            return getSoflanList(soflanGroup).CalculateSpeed(bpmList, tGrid);
+        }
+
+        // 把所有 soflan 组的 (group, currentSpeed) 写入调用方复用的 outList (Clear 后追加), 零 List 分配。
+        public void FillCurrentSpeeds(float audioMsec, List<GroupSpeed> outList)
+        {
+            outList.Clear();
+            if (!containSoflans) return;
+            var tGrid = TGridCalculator.ConvertAudioTimeToTGrid(
+                TimeSpan.FromMilliseconds(audioMsec), bpmList);
+            foreach (KeyValuePair<int, SoflanList> pair in soflanListMap)
+                outList.Add(new GroupSpeed(pair.Key, pair.Value.CalculateSpeed(bpmList, tGrid)));
+        }
+
         public void DumpCurrent(int currentTime = -1)
         {
             PatchLog.WriteLine($"-------DUMP SOFLAN TIMING POINTS-------");

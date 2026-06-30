@@ -32,6 +32,11 @@
       <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- IMGUI (OnGUI/GUILayout/GUI) — 调试面板用 -->
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <!-- MonoMod: 引用 BepInEx 随附的经典 MonoMod (v20.5.21.5, 与游戏运行时一致),
          而非 NuGet MonoMod.Patcher 25.0.1, 避免 .mm.dll 的 MonoMod AssemblyRef 与运行时版本错配.
          MonoModRules.cs 用 Cecil API 做 IL 插入, 故一并引用 BepInEx 的 Mono.Cecil 0.10.4. -->
