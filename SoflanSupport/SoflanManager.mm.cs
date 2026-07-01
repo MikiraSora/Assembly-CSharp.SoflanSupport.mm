@@ -21,6 +21,7 @@ namespace SoflanSupport
         private Dictionary<int, int> registerNoteIndexToSoflanGroupMap = new();
 
         private float cachedCalculatedCurrentMsec = float.MinValue;
+        private float cachedCalculatedApperMsec = float.MinValue;
         private Dictionary<int, List<VisibleMsecRange>> visibleRangeListMap = new();
 
         /// <summary>
@@ -33,6 +34,7 @@ namespace SoflanSupport
             containSoflans = false;
 
             cachedCalculatedCurrentMsec = float.MinValue;
+            cachedCalculatedApperMsec = float.MinValue;
             visibleRangeListMap.Clear();
 
             registerNoteIndexToSoflanGroupMap.Clear();
@@ -180,10 +182,11 @@ namespace SoflanSupport
 
         public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec)
         {
-            if (cachedCalculatedCurrentMsec != currentMsec)
+            if (cachedCalculatedCurrentMsec != currentMsec || cachedCalculatedApperMsec != apperMsec)
             {
                 rebuildCacheVisibleNoteMap(currentMsec, apperMsec);
                 cachedCalculatedCurrentMsec = currentMsec;
+                cachedCalculatedApperMsec = apperMsec;
             }
 
             if (!visibleRangeListMap.TryGetValue(getNoteSoflanGroup(noteData), out var visibleRangeList))

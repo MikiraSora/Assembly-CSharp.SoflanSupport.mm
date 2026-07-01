@@ -223,10 +223,12 @@ namespace MonoMod
                     var decVar = new VariableDefinition(module.TypeSystem.Int32);
                     body.Variables.Add(decVar);
 
+                    var dispatchStart = il.Create(OpCodes.Ldarg_0);
+                    var fallbackToOriginalCheck = il.Create(OpCodes.Br, getCurrentMsec);
                     var brToAfter = il.Create(OpCodes.Br, afterTarget);
                     var brToContinue = il.Create(OpCodes.Br, continueTarget);
 
-                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldarg_0));
+                    il.InsertBefore(getCurrentMsec, dispatchStart);
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, noteVar));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, numVar));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Callvirt, decision));
@@ -237,9 +239,28 @@ namespace MonoMod
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, decVar));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldc_I4_2));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Beq_S, brToContinue));
-                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Br, getCurrentMsec));
+                    il.InsertBefore(getCurrentMsec, fallbackToOriginalCheck);
                     il.InsertBefore(getCurrentMsec, brToAfter);
                     il.InsertBefore(getCurrentMsec, brToContinue);
+
+                    foreach (var instr in body.Instructions)
+                    {
+                        if (instr == fallbackToOriginalCheck)
+                            continue;
+
+                        if (instr.Operand == getCurrentMsec)
+                        {
+                            instr.Operand = dispatchStart;
+                        }
+                        else if (instr.Operand is Instruction[] targets)
+                        {
+                            for (int t = 0; t < targets.Length; t++)
+                            {
+                                if (targets[t] == getCurrentMsec)
+                                    targets[t] = dispatchStart;
+                            }
+                        }
+                    }
                 }
                 else
                 {
