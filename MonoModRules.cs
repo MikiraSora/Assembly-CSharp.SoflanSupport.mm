@@ -162,91 +162,130 @@ namespace MonoMod
             il.InsertAfter(userOptLdfld, il.Create(OpCodes.Callvirt, clearCache));
             il.InsertAfter(userOptLdfld, il.Create(OpCodes.Ldarg_0));
 
-            // (b) soflan 可见性派发: 插在原 msec 检查的 GetCurrentMsec 调用前
-            //     模式: call GetCurrentMsec; ldloc(note); ldflda TimingBase::time; call get_msec; ldloc(num); sub; blt.un*
-            int gcmIdx = -1;
-            var instrs = body.Instructions;
-            for (int i = 0; i + 6 < instrs.Count; i++)
+            // (b) soflan 可见性派发: 插在原 msec 可见性检查的 GetCurrentMsec 调用前.
+            //     锚点模式 (兼容两种编译器输出):
+            //       call GetCurrentMsec; ldloc(note); ldflda time; call get_msec; ldloc(num); sub;
+            //       然后是条件跳转 — 旧编译器直接 blt.un*; 新编译器 clt.un; stloc; ldloc; brfalse.s + br.
+            //     语义: GetCurrentMsec() - note.time.msec < num → 不可见(continue); 否则可见(after=RegistNote).
+            //     AFTER/CONTINUE 跨 leave, 用 beq.s→br 跳板 (见下).
+            //     锚点匹配失败时 graceful skip (不抛异常), 避免整个 patch 应用失败导致游戏无法启动.
+            try
             {
-                if (!IsCallTo(instrs[i], "GetCurrentMsec")) continue;
-                if (instrs[i + 1].OpCode != OpCodes.Ldloc && instrs[i + 1].OpCode != OpCodes.Ldloc_S) continue;
-                if (!(instrs[i + 2].OpCode == OpCodes.Ldflda && instrs[i + 2].Operand is FieldReference f2 && f2.Name == "time")) continue;
-                if (!IsCallTo(instrs[i + 3], "get_msec")) continue;
-                if (instrs[i + 4].OpCode != OpCodes.Ldloc && instrs[i + 4].OpCode != OpCodes.Ldloc_S) continue;
-                if (instrs[i + 5].OpCode != OpCodes.Sub) continue;
-                if (instrs[i + 6].OpCode != OpCodes.Blt_Un && instrs[i + 6].OpCode != OpCodes.Blt_Un_S) continue;
-                gcmIdx = i;
-                break;
+                int gcmIdx = -1;
+                Instruction continueTarget = null;
+                Instruction afterTarget = null;
+                VariableDefinition noteVar = null, numVar = null;
+                var instrs = body.Instructions;
+                for (int i = 0; i + 6 < instrs.Count; i++)
+                {
+                    if (!IsCallTo(instrs[i], "GetCurrentMsec")) continue;
+                    if (instrs[i + 1].OpCode != OpCodes.Ldloc && instrs[i + 1].OpCode != OpCodes.Ldloc_S) continue;
+                    if (!(instrs[i + 2].OpCode == OpCodes.Ldflda && instrs[i + 2].Operand is FieldReference f2 && f2.Name == "time")) continue;
+                    if (!IsCallTo(instrs[i + 3], "get_msec")) continue;
+                    if (instrs[i + 4].OpCode != OpCodes.Ldloc && instrs[i + 4].OpCode != OpCodes.Ldloc_S) continue;
+                    if (instrs[i + 5].OpCode != OpCodes.Sub) continue;
+
+                    // 旧: sub; blt.un* CONTINUE  (blt 跳 CONTINUE=不可见; fall-through=AFTER=可见)
+                    if (instrs[i + 6].OpCode == OpCodes.Blt_Un || instrs[i + 6].OpCode == OpCodes.Blt_Un_S)
+                    {
+                        gcmIdx = i;
+                        noteVar = (VariableDefinition)instrs[i + 1].Operand;
+                        numVar = (VariableDefinition)instrs[i + 4].Operand;
+                        continueTarget = (Instruction)instrs[i + 6].Operand;
+                        afterTarget = instrs[i + 7];
+                        break;
+                    }
+                    // 新: sub; clt.un; stloc; ldloc; brfalse.s AFTER; br CONTINUE
+                    if (instrs[i + 6].OpCode == OpCodes.Clt_Un && i + 9 < instrs.Count
+                        && (instrs[i + 7].OpCode == OpCodes.Stloc || instrs[i + 7].OpCode == OpCodes.Stloc_S)
+                        && (instrs[i + 8].OpCode == OpCodes.Ldloc || instrs[i + 8].OpCode == OpCodes.Ldloc_S)
+                        && (instrs[i + 9].OpCode == OpCodes.Brfalse || instrs[i + 9].OpCode == OpCodes.Brfalse_S)
+                        && i + 10 < instrs.Count
+                        && (instrs[i + 10].OpCode == OpCodes.Br || instrs[i + 10].OpCode == OpCodes.Br_S))
+                    {
+                        gcmIdx = i;
+                        noteVar = (VariableDefinition)instrs[i + 1].Operand;
+                        numVar = (VariableDefinition)instrs[i + 4].Operand;
+                        afterTarget = (Instruction)instrs[i + 9].Operand;      // brfalse 目标 = 可见(AFTER)
+                        continueTarget = (Instruction)instrs[i + 10].Operand;  // br 目标 = 不可见(CONTINUE)
+                        break;
+                    }
+                }
+
+                if (gcmIdx >= 0)
+                {
+                    var getCurrentMsec = instrs[gcmIdx];
+
+                    // soflan 可见性派发. decision 返回: 0=非soflan(走原msec检查), 1=可见(跳AFTER=RegistNote流程),
+                    // 2=不可见(跳CONTINUE=MoveNext).
+                    // AFTER/CONTINUE 在原方法中位于 leave 之后 (跨 EH leave). Mono verifier 拒绝条件分支跨 leave,
+                    // 故用 beq.s 跳到紧邻的无条件 br, 再由 br 跨 leave (无条件 br 同 try 内前向跨 leave 合法).
+                    var decVar = new VariableDefinition(module.TypeSystem.Int32);
+                    body.Variables.Add(decVar);
+
+                    var brToAfter = il.Create(OpCodes.Br, afterTarget);
+                    var brToContinue = il.Create(OpCodes.Br, continueTarget);
+
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldarg_0));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, noteVar));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, numVar));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Callvirt, decision));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Stloc, decVar));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, decVar));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldc_I4_1));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Beq_S, brToAfter));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, decVar));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldc_I4_2));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Beq_S, brToContinue));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Br, getCurrentMsec));
+                    il.InsertBefore(getCurrentMsec, brToAfter);
+                    il.InsertBefore(getCurrentMsec, brToContinue);
+                }
+                else
+                {
+                    System.Console.WriteLine("[SoflanRules] UpdateCtrl: visibility-check pattern not found, skip (b) dispatch");
+                }
             }
-            if (gcmIdx < 0) throw new Exception("[SoflanRules] UpdateCtrl: visibility-check pattern not found");
-
-            var getCurrentMsec = instrs[gcmIdx];
-            var noteVar = (VariableDefinition)((instrs[gcmIdx + 1].Operand));
-            var numVar = (VariableDefinition)((instrs[gcmIdx + 4].Operand));
-            var blt = instrs[gcmIdx + 6];
-            var continueTarget = (Instruction)blt.Operand;          // continue (MoveNext)
-            var afterTarget = instrs[gcmIdx + 7];                    // 原 if 之后
-
-            // soflan 可见性派发. decision 返回: 0=非soflan(走原msec检查), 1=可见(跳AFTER=RegistNote流程),
-            // 2=不可见(跳CONTINUE=MoveNext).
-            //
-            // 关键: AFTER/CONTINUE 在原方法中位于 leave 指令之后 (跨 EH leave 边界). Mono verifier 拒绝
-            // 条件分支(beq)跨越 leave, 故先用短条件跳(beq.s)到紧邻的无条件 br, 再由 br 跨 leave 到目标.
-            // br(无条件) 在同 try 内前向跨 leave 合法.
-            //
-            // 新增局部存 decision 结果, 因 beq.s 消耗操作数后无法复用.
-            var decVar = new VariableDefinition(module.TypeSystem.Int32);
-            body.Variables.Add(decVar);
-
-            // 先创建跳板标签 (无条件 br), 稍后 InsertBefore 填充.
-            var brToAfter = il.Create(OpCodes.Br, afterTarget);
-            var brToContinue = il.Create(OpCodes.Br, continueTarget);
-
-            // InsertBefore(getCurrentMsec) 按书写顺序(正序)执行. 期望:
-            //   ldarg.0; ldloc note; ldloc num; callvirt decision; stloc decVar
-            //   ldloc decVar; ldc.i4.1; beq.s brToAfter
-            //   ldloc decVar; ldc.i4.2; beq.s brToContinue
-            //   (fall-through 到 getCurrentMsec 原 msec 检查)
-            //   brToAfter: br AFTER          (跨 leave)
-            //   brToContinue: br CONTINUE    (跨 leave)
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldarg_0));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, noteVar));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, numVar));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Callvirt, decision));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Stloc, decVar));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, decVar));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldc_I4_1));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Beq_S, brToAfter));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, decVar));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldc_I4_2));
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Beq_S, brToContinue));
-            // fall-through (decision==0): 跳过两个跳板, 直达原 msec 检查.
-            il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Br, getCurrentMsec));
-            // 跳板: 由 beq.s 跳入, 再用无条件 br 跨 leave 到目标.
-            il.InsertBefore(getCurrentMsec, brToAfter);
-            il.InsertBefore(getCurrentMsec, brToContinue);
+            catch (Exception ex)
+            {
+                System.Console.WriteLine("[SoflanRules] UpdateCtrl (b) dispatch failed: " + ex.Message);
+            }
 
             // (c) 第 2 个 RegistNote 失败 break 前 插入 ldarg.0 ldloc(note) callvirt __SoflanLogRegistNoteFailed
-            //     note = RegistNote 调用前一条 ldloc (note 实参)
-            var registNotes = body.Instructions.Where(i => IsCallTo(i, "RegistNote")).ToList();
-            if (registNotes.Count < 2) throw new Exception("[SoflanRules] UpdateCtrl: expected >=2 RegistNote calls, got " + registNotes.Count);
-            var secondRegist = registNotes[1];
-            int sIdx = instrs.IndexOf(secondRegist);
-            // 前一条应为 ldloc(note)
-            var noteArgInstr = instrs[sIdx - 1];
-            if (noteArgInstr.OpCode != OpCodes.Ldloc && noteArgInstr.OpCode != OpCodes.Ldloc_S)
-                throw new Exception("[SoflanRules] UpdateCtrl: RegistNote note-arg ldloc not found");
-            var noteArgVar = (VariableDefinition)noteArgInstr.Operand;
-            // 向后跳过 brtrue/brtrue.s, 找到 leave/leave.s (break)
-            int j = sIdx + 1;
-            while (j < instrs.Count && (instrs[j].OpCode == OpCodes.Brtrue || instrs[j].OpCode == OpCodes.Brtrue_S)) j++;
-            if (j >= instrs.Count || (instrs[j].OpCode != OpCodes.Leave && instrs[j].OpCode != OpCodes.Leave_S))
-                throw new Exception("[SoflanRules] UpdateCtrl: RegistNote break(leave) not found");
-            var leaveInstr = instrs[j];
-            // InsertBefore 正序: [ldarg.0, ldloc note, callvirt]  (书写顺序即执行顺序)
-            il.InsertBefore(leaveInstr, il.Create(OpCodes.Ldarg_0));
-            il.InsertBefore(leaveInstr, il.Create(OpCodes.Ldloc, noteArgVar));
-            il.InsertBefore(leaveInstr, il.Create(OpCodes.Callvirt, logFailed));
+            //     note = RegistNote 调用前一条 ldloc (note 实参). 失败时 graceful skip.
+            try
+            {
+                var instrs = body.Instructions;
+                var registNotes = body.Instructions.Where(i => IsCallTo(i, "RegistNote")).ToList();
+                if (registNotes.Count < 2)
+                {
+                    System.Console.WriteLine("[SoflanRules] UpdateCtrl: expected >=2 RegistNote calls, got " + registNotes.Count + ", skip (c)");
+                }
+                else
+                {
+                    var secondRegist = registNotes[1];
+                    int sIdx = instrs.IndexOf(secondRegist);
+                    // 前一条应为 ldloc(note)
+                    var noteArgInstr = instrs[sIdx - 1];
+                    if (noteArgInstr.OpCode != OpCodes.Ldloc && noteArgInstr.OpCode != OpCodes.Ldloc_S)
+                        throw new Exception("[SoflanRules] UpdateCtrl: RegistNote note-arg ldloc not found");
+                    var noteArgVar = (VariableDefinition)noteArgInstr.Operand;
+                    // 向后跳过 brtrue/brtrue.s, 找到 leave/leave.s (break)
+                    int j = sIdx + 1;
+                    while (j < instrs.Count && (instrs[j].OpCode == OpCodes.Brtrue || instrs[j].OpCode == OpCodes.Brtrue_S)) j++;
+                    if (j >= instrs.Count || (instrs[j].OpCode != OpCodes.Leave && instrs[j].OpCode != OpCodes.Leave_S))
+                        throw new Exception("[SoflanRules] UpdateCtrl: RegistNote break(leave) not found");
+                    var leaveInstr = instrs[j];
+                    // InsertBefore 正序: [ldarg.0, ldloc note, callvirt]  (书写顺序即执行顺序)
+                    il.InsertBefore(leaveInstr, il.Create(OpCodes.Ldarg_0));
+                    il.InsertBefore(leaveInstr, il.Create(OpCodes.Ldloc, noteArgVar));
+                    il.InsertBefore(leaveInstr, il.Create(OpCodes.Callvirt, logFailed));
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine("[SoflanRules] UpdateCtrl (c) logFailed failed: " + ex.Message);
+            }
         }
 
         // ---------------- 4. GameProcess.OnUpdate ----------------

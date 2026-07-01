@@ -19,6 +19,7 @@ namespace SoflanSupport
 {
     public class SoflanPanelBehaviour : MonoBehaviour
     {
+#if DEBUG
         private static bool _visible = true;
         private static bool _showAllGroups = false;   // checkbox 状态
 
@@ -27,6 +28,7 @@ namespace SoflanSupport
         private bool _hasData;
         private float _fps;
         private float _fpsSmooth;
+        private float _copyFeedbackTime;   // 复制按钮点击时刻, 用于显示"已复制"提示
 
         // 复用的 group 倍率缓冲 (避免每帧 new List)
         private readonly List<SoflanManager.GroupSpeed> _allSpeeds = new List<SoflanManager.GroupSpeed>();
@@ -52,16 +54,48 @@ namespace SoflanSupport
         // patch_NoteBase 查询本实例是否被选中.
         public static bool IsNoteSelected(NoteBase nb) => _selectedNote == nb;
         // note 池化复用时 (Initialize) 清除: 若本实例曾被选中则取消选中.
-        public static void OnNoteReinitialized(NoteBase nb) { if (_selectedNote == nb) _selectedNote = null; }
+        public static void OnNoteReinitialized(NoteBase nb) { if (_selectedNote == nb) ClearSelectedNote(); }
         // 被选中的 note 进入 EndNote 时调用: 清选中 + 清面板显示数据.
-        public static void OnSelectedNoteEnded()
+        public static void OnSelectedNoteEnded() => ClearSelectedNote();
+
+        // 谱面清理、面板销毁、note 复用/结束时统一释放静态 note 引用, 避免跨场景滞留 GameObject 图.
+        public static void ClearSelectedNote()
         {
             _selectedNote = null;
+            SelectedData = default;
             HasSelectedData = false;
+            _cycleIndex = 0;
+            _lastHitCount = 0;
+        }
+
+        private static void ClearStaleSelectedNote()
+        {
+            if (_selectedNote == null)
+            {
+                if (HasSelectedData) ClearSelectedNote();
+                return;
+            }
+
+            try
+            {
+                if (!_selectedNote.gameObject.activeInHierarchy)
+                    ClearSelectedNote();
+            }
+            catch
+            {
+                ClearSelectedNote();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            ClearSelectedNote();
         }
 
         private void Update()
         {
+            ClearStaleSelectedNote();
+
             // FPS 平滑
             float dt = Time.deltaTime;
             if (dt > 0f)
@@ -166,7 +200,50 @@ namespace SoflanSupport
                 GUILayout.Label($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
                 GUILayout.Label($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
             }
+
+            if (GUILayout.Button("复制面板内容到剪贴板"))
+            {
+                GUIUtility.systemCopyBuffer = BuildClipboardText(timeStr);
+                _copyFeedbackTime = Time.realtimeSinceStartup;
+            }
+            if (_copyFeedbackTime > 0f && Time.realtimeSinceStartup - _copyFeedbackTime < 2f)
+                GUILayout.Label("✓ 已复制到剪贴板");
+
             GUILayout.EndArea();
         }
+
+        // 把面板所有文本格式化为多行字符串, 供复制到剪贴板.
+        private string BuildClipboardText(string timeStr)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=== Soflan Monitor ===");
+            sb.AppendLine($"PlayTime: {_msec:F1} ms  ({timeStr})");
+            sb.AppendLine($"SoflanGroup0 Speed: {_speed0:F3}x" + (_hasData ? "" : " (no data)"));
+            sb.AppendLine($"FPS: {_fps:F1}");
+            if (_showAllGroups && _hasData)
+            {
+                sb.AppendLine("All group speeds:");
+                foreach (var kv in _allSpeeds)
+                    sb.AppendLine($"  group{kv.Group}: {kv.Speed:F3}x");
+            }
+            if (HasSelectedData)
+            {
+                var d = SelectedData;
+                sb.AppendLine("--- Selected Tap ---");
+                sb.AppendLine($"NoteIndex: {d.NoteIndex}  NoteStat: {d.NoteStat}");
+                sb.AppendLine($"diffTime: {d.DiffTime:F3}  absDiffTime: {d.AbsDiffTime:F3}");
+                sb.AppendLine($"scaleStartTime: {d.ScaleStartTime:F3}  moveStartTime: {d.MoveStartTime:F3}");
+                sb.AppendLine($"moveProgress: {d.MoveProgress:F3}  finalScale: {d.FinalScale:F3}");
+                sb.AppendLine($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
+                sb.AppendLine($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
+            }
+            return sb.ToString();
+        }
+#else
+        public static bool IsNoteSelected(NoteBase nb) => false;
+        public static void OnNoteReinitialized(NoteBase nb) { }
+        public static void OnSelectedNoteEnded() { }
+        public static void ClearSelectedNote() { }
+#endif
     }
 }

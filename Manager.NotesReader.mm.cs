@@ -12,6 +12,7 @@ namespace Manager
         // loadMa2Main: calcBPMList 调用前 — 清空 soflan 状态 (对应 head 中 clearAll 调用)
         public static void __SoflanClearAll()
         {
+            SoflanPanelBehaviour.ClearSelectedNote();
             Singleton<SoflanManager>.Instance.clearAll();
         }
 

@@ -14,17 +14,22 @@ namespace SoflanSupport
 {
     public class GamePlayFumenController
     {
+#if DEBUG
         private static bool _panelMounted;
+#endif
 
         public void Update()
         {
+#if DEBUG
             MountPanelIfNeeded();
+#endif
             if (DebugInput.GetKeyDown(UnityEngine.KeyCode.P))
             {
                 PauseOrResumeGamePlay();
             }
         }
 
+#if DEBUG
         // 一次性惰性挂载调试面板 MonoBehaviour。本 Update 每帧由 GameProcess.OnUpdate 起始的
         // __SoflanUpdateGamePlayFumenController 驱动, 谱面进入后即触发首帧挂载。
         private static void MountPanelIfNeeded()
@@ -42,6 +47,7 @@ namespace SoflanSupport
                 // 挂载失败不阻断游戏; 可视情况记 PatchLog。
             }
         }
+#endif
 
         private static void PauseOrResumeGamePlay()
         {

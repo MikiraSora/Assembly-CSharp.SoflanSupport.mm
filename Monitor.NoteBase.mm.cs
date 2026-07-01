@@ -25,11 +25,13 @@ namespace Monitor
         private bool isInSoflan;
         private float noteSoflanTime;
 
+#if DEBUG
         // --- 调试面板选中 (右键点击 Tap) ---
         // 选中状态由 SoflanPanelBehaviour._selectedNote 集中维护 (避免 patch 新增字段跨类访问的编译期鸿沟);
         // 本类通过 SoflanPanelBehaviour.IsNoteSelected(this) 查询。
         private Color _origSpriteColor;         // 选中前的原 sprite color, 取消选中时恢复
         private bool _colorSaved;
+#endif
 
         public extern void orig_Initialize(NoteData note);
 
@@ -37,9 +39,20 @@ namespace Monitor
         {
             orig_Initialize(note);
 
+#if DEBUG
             // 池化复用时: 若本实例曾被选中, 清除选中 (避免复用实例仍标记为选中)
             SoflanPanelBehaviour.OnNoteReinitialized(this);
             _colorSaved = false;
+
+            // 给视觉物件加 BoxCollider2D 供调试面板右键选中 (所有 note 类型: Tap/Break/Hold...).
+            // 用 2D collider: NoteObj.localScale.z=0 会把 3D BoxCollider 压成零厚度薄片;
+            // 2D 物理忽略 z, 不受影响。不手动设 size —— AddComponent 时 Unity 自动按 SpriteRenderer
+            // 的 sprite bounds 适配 (手动设 sprite.bounds.size 会因它是世界空间而与局部空间 collider 错位)。
+            if (NoteObj != null && NoteObj.GetComponent<Collider2D>() == null)
+            {
+                NoteObj.AddComponent<BoxCollider2D>();
+            }
+#endif
 
             //Soflan Support
             soflanManager = Singleton<SoflanManager>.Instance;
@@ -74,6 +87,7 @@ namespace Monitor
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
 
+#if DEBUG
             // 调试选中视觉: 选中时高亮黄 + alpha 0.5~1 呼吸; 取消选中恢复原色 (仅恢复一次).
             if (SpriteRender != null)
             {
@@ -89,6 +103,7 @@ namespace Monitor
                     _colorSaved = false;
                 }
             }
+#endif
         }
 
         private float GetSoflanTimeDiff()
@@ -103,6 +118,7 @@ namespace Monitor
         {
             orig_EndNote();
 
+#if DEBUG
             // 被选中的 note 结束时: 恢复原色 + 通知面板清选中与显示数据.
             if (SoflanPanelBehaviour.IsNoteSelected(this))
             {
@@ -113,11 +129,12 @@ namespace Monitor
                 }
                 SoflanPanelBehaviour.OnSelectedNoteEnded();
             }
+#endif
         }
 
         protected extern float orig_GetNoteYPosition();
 
-        protected float GetNoteYPosition()
+        protected virtual float GetNoteYPosition()
         {
             if (isInSoflan && checkSupportSoflan())
                 return GetNoteYPosition_soflan();
@@ -238,6 +255,7 @@ namespace Monitor
 
             var clipedSoflanY = Mathf.Clamp(adjustedSoflanY, 120, 680);
 
+#if DEBUG
             // 调试面板: 选中本 note 时, 把所有计算变量导出到面板 (struct 值类型, 零堆分配).
             if (SoflanPanelBehaviour.IsNoteSelected(this))
             {
@@ -258,6 +276,7 @@ namespace Monitor
                 };
                 SoflanPanelBehaviour.HasSelectedData = true;
             }
+#endif
 
             return clipedSoflanY;
         }
