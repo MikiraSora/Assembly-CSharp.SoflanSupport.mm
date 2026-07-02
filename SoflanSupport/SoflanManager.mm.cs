@@ -22,7 +22,8 @@ namespace SoflanSupport
 
         private float cachedCalculatedCurrentMsec = float.MinValue;
         private float cachedCalculatedApperMsec = float.MinValue;
-        private Dictionary<int, List<VisibleMsecRange>> visibleRangeListMap = new();
+        private int visibleRangeCacheVersion = 0;
+        private Dictionary<int, VisibleMsecRangeCache> visibleRangeListMap = new();
 
         /// <summary>
         /// clear all
@@ -35,6 +36,7 @@ namespace SoflanSupport
 
             cachedCalculatedCurrentMsec = float.MinValue;
             cachedCalculatedApperMsec = float.MinValue;
+            visibleRangeCacheVersion = 0;
             visibleRangeListMap.Clear();
 
             registerNoteIndexToSoflanGroupMap.Clear();
@@ -180,16 +182,25 @@ namespace SoflanSupport
             }
         }
 
+        private sealed class VisibleMsecRangeCache
+        {
+            public int Version;
+            public readonly List<VisibleMsecRange> Ranges = new List<VisibleMsecRange>();
+        }
+
         public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec)
         {
-            if (cachedCalculatedCurrentMsec != currentMsec || cachedCalculatedApperMsec != apperMsec)
-            {
-                rebuildCacheVisibleNoteMap(currentMsec, apperMsec);
-                cachedCalculatedCurrentMsec = currentMsec;
-                cachedCalculatedApperMsec = apperMsec;
-            }
+            var soflanGroup = getNoteSoflanGroup(noteData);
+            var currentSoflanTime = ConvertAudioTimeToY_PreviewMode(currentMsec, soflanGroup);
+            return checkNoteVisible(noteData, currentMsec, apperMsec, soflanGroup, currentSoflanTime);
+        }
 
-            if (!visibleRangeListMap.TryGetValue(getNoteSoflanGroup(noteData), out var visibleRangeList))
+        public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec, int soflanGroup, float currentSoflanTime)
+        {
+            BeginVisibleRangeFrame(currentMsec, apperMsec);
+
+            var visibleRangeList = GetVisibleRangeList(soflanGroup, currentSoflanTime, apperMsec);
+            if (visibleRangeList == null)
                 return false;
 
             // foreach 替代 LINQ Any, 避免每帧闭包/委托/迭代器分配 (热路径零分配).
@@ -212,41 +223,50 @@ namespace SoflanSupport
             return getNoteSoflanGroup(noteData.indexNote);
         }
 
-        private void rebuildCacheVisibleNoteMap(float currentMsec, float apperMsec)
+        private void BeginVisibleRangeFrame(float currentMsec, float apperMsec)
         {
-            // 不 Clear 整个 map (会丢弃已分配的 List 容量); 改为逐 key 复用已有 List (Clear + 重填),
-            // 仅对新出现的 soflan group 才 new List. 避免每帧 LINQ Select/ToList 的闭包/委托/迭代器/List 分配.
-            foreach (KeyValuePair<int, SoflanList> soflanList in soflanListMap)
+            if (cachedCalculatedCurrentMsec == currentMsec && cachedCalculatedApperMsec == apperMsec)
+                return;
+
+            cachedCalculatedCurrentMsec = currentMsec;
+            cachedCalculatedApperMsec = apperMsec;
+
+            if (visibleRangeCacheVersion == int.MaxValue)
             {
-                var soflanTimeMsec = ConvertAudioTimeToY_PreviewMode(currentMsec, soflanList.Key);
+                visibleRangeListMap.Clear();
+                visibleRangeCacheVersion = 1;
+            }
+            else
+            {
+                visibleRangeCacheVersion++;
+            }
+        }
 
-                if (!visibleRangeListMap.TryGetValue(soflanList.Key, out var list))
-                {
-                    list = new List<VisibleMsecRange>();
-                    visibleRangeListMap[soflanList.Key] = list;
-                }
-                list.Clear();
-
-                var visibleRanges = soflanList.Value
-                    .GetVisibleRanges_PreviewMode(soflanTimeMsec, apperMsec, 0, bpmList, 1);
-                foreach (var x in visibleRanges)
-                {
-                    var minMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.minTGrid, bpmList).TotalMilliseconds;
-                    var maxMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.maxTGrid, bpmList).TotalMilliseconds;
-                    list.Add(new VisibleMsecRange(minMsec, x.minTGrid, maxMsec, x.maxTGrid));
-                }
+        private List<VisibleMsecRange> GetVisibleRangeList(int soflanGroup, float currentSoflanTime, float apperMsec)
+        {
+            if (!visibleRangeListMap.TryGetValue(soflanGroup, out var cache))
+            {
+                cache = new VisibleMsecRangeCache();
+                visibleRangeListMap[soflanGroup] = cache;
             }
 
-            // 移除已不存在的 soflan group (谱面重新加载后 soflanListMap 可能变化), 复用而非整 map Clear.
-            if (visibleRangeListMap.Count != soflanListMap.Count)
+            if (cache.Version == visibleRangeCacheVersion)
+                return cache.Ranges;
+
+            cache.Ranges.Clear();
+
+            // Lazy per-group rebuild: only groups touched by notes in this frame are recalculated.
+            var soflanList = getSoflanList(soflanGroup);
+            var visibleRanges = soflanList.GetVisibleRanges_PreviewMode(currentSoflanTime, apperMsec, 0, bpmList, 1);
+            foreach (var x in visibleRanges)
             {
-                var stale = new List<int>();
-                foreach (var key in visibleRangeListMap.Keys)
-                    if (!soflanListMap.ContainsKey(key))
-                        stale.Add(key);
-                foreach (var key in stale)
-                    visibleRangeListMap.Remove(key);
+                var minMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.minTGrid, bpmList).TotalMilliseconds;
+                var maxMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.maxTGrid, bpmList).TotalMilliseconds;
+                cache.Ranges.Add(new VisibleMsecRange(minMsec, x.minTGrid, maxMsec, x.maxTGrid));
             }
+
+            cache.Version = visibleRangeCacheVersion;
+            return cache.Ranges;
         }
 
         public float ConvertAudioTimeToY_PreviewMode(float msec, int soflanGroup)
@@ -302,10 +322,10 @@ namespace SoflanSupport
             PatchLog.WriteLine($"containSoflans: {containSoflans}");
             PatchLog.WriteLine($"cachedCalculatedCurrentMsec: {cachedCalculatedCurrentMsec}");
             PatchLog.WriteLine($"cachedVisibleRangeListMap:");
-            foreach (KeyValuePair<int, List<VisibleMsecRange>> pair in visibleRangeListMap)
+            foreach (KeyValuePair<int, VisibleMsecRangeCache> pair in visibleRangeListMap)
             {
                 PatchLog.WriteLine($"[{pair.Key}]:");
-                foreach (var visibleRange in pair.Value)
+                foreach (var visibleRange in pair.Value.Ranges)
                     PatchLog.WriteLine($"\t\t{visibleRange.MinTGrid}({visibleRange.MinMSec}ms) ~ {visibleRange.MaxTGrid}({visibleRange.MaxMSec}ms), current:{ConvertAudioTimeToY_PreviewMode(cachedCalculatedCurrentMsec, pair.Key)}");
             }
         }

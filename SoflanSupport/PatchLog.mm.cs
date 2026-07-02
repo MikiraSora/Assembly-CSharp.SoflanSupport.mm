@@ -1,5 +1,6 @@
 // SoflanSupport.PatchLog — 新增类型, verbatim 自 head commit 2a7a4a4.
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
@@ -19,6 +20,7 @@ namespace SoflanSupport
             catch { }
         }
 
+        [Conditional("DEBUG")]
         public static void WriteLine(string msg)
         {
             if (!Setting.EnablePatchLog)

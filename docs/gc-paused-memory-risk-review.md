@@ -21,17 +21,17 @@
 - `Monitor.Game.GameCtrl.mm.cs:31`
 
 现象:
-`GameCtrl.UpdateCtrl` 的 soflan 可见性判定会调用 `SoflanManager.checkNoteVisible()`。当 `cachedCalculatedCurrentMsec != currentMsec` 时, `rebuildCacheVisibleNoteMap()` 会调用:
+`GameCtrl.UpdateCtrl` 的 soflan 可见性判定会调用 `SoflanManager.checkNoteVisible()`。当前实现已改为按 group 懒计算: 帧时间变化时只递增 `visibleRangeCacheVersion`, 本帧首次检查某个 group 时才调用:
 
 ```csharp
 var visibleRanges = soflanList.Value
     .GetVisibleRanges_PreviewMode(soflanTimeMsec, apperMsec, 0, bpmList, 1);
 ```
 
-当前代码复用了 `visibleRangeListMap` 里的 `List<VisibleMsecRange>`, 但 `GetVisibleRanges_PreviewMode()` 返回值是否每次分配由外部库决定。从调用形态看, 它很可能创建临时集合/迭代器。
+当前代码复用了 `visibleRangeListMap` 里的 `VisibleMsecRangeCache.Ranges`, 但 `GetVisibleRanges_PreviewMode()` 返回值是否每次分配由外部库决定。从调用形态看, 它很可能创建临时集合/迭代器。
 
 影响:
-播放中 GC 暂停时, 若该方法每帧分配, 临时对象会在整首歌期间累积。谱面 soflan group 越多、当前帧触发可见性检查越频繁, 累积越明显。
+播放中 GC 暂停时, 若该方法分配, 临时对象会在整首歌期间累积。P-001 已将成本限制到“本帧实际被检查到的 group”, 但当前帧触发可见性检查越频繁, 累积仍会越明显。
 
 建议:
 - 优先用 Unity Profiler / Mono allocation 采样确认 `GetVisibleRanges_PreviewMode()` 是否分配。
@@ -139,7 +139,7 @@ var visibleRanges = soflanList.Value
 建议:
 - 如果希望切歌后释放高水位容量, 在 `clearAll()` 中重新赋值:
   - `registerNoteIndexToSoflanGroupMap = new Dictionary<int, int>();`
-  - `visibleRangeListMap = new Dictionary<int, List<VisibleMsecRange>>();`
+  - `visibleRangeListMap = new Dictionary<int, VisibleMsecRangeCache>();`
 - 若更重视避免加载期重新分配, 保持现状也可以接受。
 
 ### R-007 `visibleRangeListMap` 内部 List 容量会按历史最大可见范围保留
@@ -151,7 +151,7 @@ var visibleRanges = soflanList.Value
 - `SoflanSupport/SoflanManager.mm.cs:233`
 
 现象:
-每个 soflan group 对应的 `List<VisibleMsecRange>` 被复用, 每帧 `Clear()` 后重新填充。`Clear()` 不释放内部数组容量。
+每个已访问 soflan group 对应的 `VisibleMsecRangeCache.Ranges` 被复用, 本帧该 group 首次检查时 `Clear()` 后重新填充。`Clear()` 不释放内部数组容量。
 
 影响:
 和 R-006 类似, 是高水位容量保留, 不是无限增长。好处是减少播放中分配; 代价是内存按历史最大容量常驻。

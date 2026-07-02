@@ -17,6 +17,7 @@ namespace Monitor.Game
     {
         // 每帧 soflan 时间缓存 (head 中为字段初始化; patch 字段初始化器不会被复制, 故惰性初始化)
         private Dictionary<int, float> cachedSoflanTimeMap;
+        private float cachedSoflanTimeMsec = float.MinValue;
 
         // UpdateCtrl: UserOption 赋值后 — 清空每帧 soflan 时间缓存
         public void __SoflanClearCache()
@@ -24,6 +25,7 @@ namespace Monitor.Game
             if (cachedSoflanTimeMap == null)
                 cachedSoflanTimeMap = new Dictionary<int, float>();
             cachedSoflanTimeMap.Clear();
+            cachedSoflanTimeMsec = float.MinValue;
         }
 
         // UpdateCtrl: 原 msec 可见性检查前 — soflan 可见性判定
@@ -33,10 +35,18 @@ namespace Monitor.Game
             var soflanManager = Singleton<SoflanManager>.Instance;
             if (!soflanManager.containsSoflans())
                 return 0;
+            var currentMsec = NotesManager.GetCurrentMsec();
+            if (cachedSoflanTimeMap == null)
+                cachedSoflanTimeMap = new Dictionary<int, float>();
+            if (cachedSoflanTimeMsec != currentMsec)
+            {
+                cachedSoflanTimeMap.Clear();
+                cachedSoflanTimeMsec = currentMsec;
+            }
             var noteSoflanGroup = soflanManager.getNoteSoflanGroup(note);
             if (!cachedSoflanTimeMap.TryGetValue(noteSoflanGroup, out var soflanTime))
-                cachedSoflanTimeMap[noteSoflanGroup] = soflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(NotesManager.GetCurrentMsec(), noteSoflanGroup);
-            if (!soflanManager.checkNoteVisible(note, NotesManager.GetCurrentMsec(), num))
+                cachedSoflanTimeMap[noteSoflanGroup] = soflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(currentMsec, noteSoflanGroup);
+            if (!soflanManager.checkNoteVisible(note, currentMsec, num, noteSoflanGroup, soflanTime))
                 return 2;
             return 1;
         }

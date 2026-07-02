@@ -8,13 +8,15 @@
 
 ## 结论
 
-当前实现对几千个变速组存在严重性能风险。主要问题不是单个物件的 Y/Scale 公式, 而是可见性判断会在播放热路径中按全谱变速组数量重建缓存。
+P-001 已处理: 当前实现已把 `SoflanManager.checkNoteVisible()` 的可见范围缓存改成按当前 note 的 group 懒计算, 不再在播放热路径中每帧遍历全谱所有变速组。
 
-最高优先级问题是 `SoflanManager.checkNoteVisible()` 触发的 `rebuildCacheVisibleNoteMap()`。只要播放时间变化, 它就遍历 `soflanListMap` 里的所有组, 对每组计算当前 Soflan 时间和可见范围。几千组时, 每帧成本会从“当前被检查物件数量”放大成“全谱组数量”。
+P-002 已处理: `GameCtrl` 中的每帧 SoflanTime 缓存已经传入 `SoflanManager.checkNoteVisible()`, 避免同一帧同一 group 在可见性判断里重复计算当前 SoflanTime。
+
+剩余主要风险集中在 P-003/P-004: DEBUG 面板显示全部 group 时的全组计算与绘制, 以及加载期大量 SFL 日志/解析成本。
 
 ## 风险项
 
-### P-001 每帧按所有 Soflan 组重建可见范围缓存
+### P-001 每帧按所有 Soflan 组重建可见范围缓存（已处理）
 
 位置:
 
@@ -23,7 +25,7 @@
 - `SoflanSupport/SoflanManager.mm.cs:219`
 - `SoflanSupport/SoflanManager.mm.cs:230`
 
-当前流程:
+旧流程:
 
 ```csharp
 public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec)
@@ -49,7 +51,7 @@ foreach (KeyValuePair<int, SoflanList> soflanList in soflanListMap)
 }
 ```
 
-影响:
+旧影响:
 
 - 每帧遍历所有变速组。
 - 每组调用一次 `ConvertAudioTimeToY_PreviewMode()`。
@@ -59,14 +61,15 @@ foreach (KeyValuePair<int, SoflanList> soflanList in soflanListMap)
 
 几千组时, 这是播放期间最可能造成掉帧的点。
 
-建议:
+处理情况:
 
-- 不要每帧重建所有组的可见范围。
-- 改成按当前 note 的 group 懒计算: 本帧首次检查某个 group 时才计算该 group 的 visible ranges。
-- 更好的方向是缓存每个 note 的 `noteSoflanTime`, 可见性直接用 `noteSoflanTime - currentSoflanTime` 判断, 避免为全组构造可见范围列表。
-- 如果继续保留 range 缓存, key 应至少包含 `group + currentMsec + apperMsec`, 并只覆盖本帧访问过的组。
+- 已删除热路径中的 `rebuildCacheVisibleNoteMap()` 全组重建。
+- 当前代码使用 `visibleRangeCacheVersion` 标记当前帧缓存版本。
+- `checkNoteVisible()` 先调用 `BeginVisibleRangeFrame()`, 然后只对当前 note 的 `soflanGroup` 调用 `GetVisibleRangeList()`。
+- 同一帧同一 group 后续复用 `VisibleMsecRangeCache.Ranges`。
+- 成本从“每帧所有 group”降低为“本帧实际被检查到的 group”。
 
-### P-002 `GameCtrl` 的每帧 SoflanTime 缓存计算结果未实际使用
+### P-002 `GameCtrl` 的每帧 SoflanTime 缓存计算结果未实际使用（已处理）
 
 位置:
 
@@ -74,7 +77,7 @@ foreach (KeyValuePair<int, SoflanList> soflanList in soflanListMap)
 - `Monitor.Game.GameCtrl.mm.cs:36`
 - `Monitor.Game.GameCtrl.mm.cs:37`
 
-当前代码:
+旧代码:
 
 ```csharp
 var noteSoflanGroup = soflanManager.getNoteSoflanGroup(note);
@@ -84,16 +87,19 @@ if (!soflanManager.checkNoteVisible(note, NotesManager.GetCurrentMsec(), num))
     return 2;
 ```
 
-问题:
+旧问题:
 
 - `soflanTime` 变量计算后没有传入 `checkNoteVisible()`。
-- `checkNoteVisible()` 内部又会计算 Soflan 时间, 并且还会触发 P-001 的全组 rebuild。
+- `checkNoteVisible()` 内部又会计算 Soflan 时间。
 - 当每个物件独立组时, 本帧扫描到多少不同组, 这里就可能多算多少次。
 
-建议:
+处理情况:
 
-- 删除这段未使用缓存, 或把当前组的 `currentSoflanTime` 传给可见性判断。
-- 如果修 P-001, 可以把这个字典作为“本帧 group -> currentSoflanTime”的实际缓存, 但必须避免再触发全组 rebuild。
+- `GameCtrl.__SoflanNoteDecision()` 现在先保存一次 `currentMsec`。
+- `cachedSoflanTimeMap` 仍然作为“本帧 group -> currentSoflanTime”的缓存。
+- `cachedSoflanTimeMsec` 绑定缓存对应的 `currentMsec`; 如果同一次 `UpdateCtrl` 中时间变化, 会清空并按新时间重算, 避免同组复用旧 SoflanTime。
+- 新增的 `checkNoteVisible(note, currentMsec, apperMsec, soflanGroup, currentSoflanTime)` 直接使用传入的 `currentSoflanTime`。
+- `SoflanManager.GetVisibleRangeList()` 不再自己调用 `ConvertAudioTimeToY_PreviewMode()`。
 
 ### P-003 DEBUG 面板显示全部 group 时按所有组计算和绘制
 
@@ -216,8 +222,8 @@ public SoflanList getSoflanList(int soflanGroup)
 
 ## 优先级
 
-1. 修 P-001: 可见性判断改为按需计算当前 group, 禁止每帧遍历所有组。
-2. 修 P-002: 删除或接入 `cachedSoflanTimeMap`, 避免重复计算。
+1. P-001 已完成: 可见性判断已改为按需计算当前 group, 不再每帧遍历所有组。
+2. P-002 已完成: `cachedSoflanTimeMap` 已接入可见性判断, 避免重复计算。
 3. 限制 P-003: DEBUG 面板禁止直接显示几千组。
 4. 降低 P-004: 关闭默认日志, 移除加载期逐条 SFL 日志。
 5. 优化 P-005: 建立播放帧级 group time cache。
@@ -227,4 +233,4 @@ public SoflanList getSoflanList(int soflanGroup)
 
 当前测试谱面把 5/7/8 轨道改成每个物件独立组后, 已经从 8 个组增长到数百个组。这个规模可以用于验证 P-001 的趋势, 但还没达到几千组的最坏情况。
 
-如果继续把更多物件改成独立组, 或把物件间隔改得更密, 必须先处理 P-001, 否则播放期可见性判断会成为主要瓶颈。
+如果继续把更多物件改成独立组, 或把物件间隔改得更密, P-001 已不再按全谱组数重建可见范围, P-002 也已避免可见性路径重复计算当前 SoflanTime。后续应优先处理 P-003/P-004, 避免 DEBUG 面板全组遍历和加载期日志成为新的瓶颈。
