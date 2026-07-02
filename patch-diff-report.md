@@ -60,7 +60,6 @@ patch 项目引用 **BepInEx 随附的经典 MonoMod** (`F:\SDEZ_165\Package\Bep
 | `NotesReader.loadNote` | 末尾 `ret` 前 | 末尾 `ret` (单 ret) | `ldloc.0(result 保留); ldloc V_2(noteData); ldarg.1(rec); ldarg.0(this); call __SoflanLoadNote; ret` |
 | `GameCtrl.UpdateCtrl` | `ldfld UserOption` 后 | `ldfld GameScoreList::UserOption` (唯一) | `ldarg.0; callvirt __SoflanClearCache()` |
 | `GameCtrl.UpdateCtrl` | 原 msec 可见性检查前 | `call GetCurrentMsec`(匹配 `GetCurrentMsec;ldloc;ldflda time;get_msec;ldloc;sub;blt.un` 模式) | `ldarg.0; ldloc V_8(note); ldloc V_6(num); callvirt __SoflanNoteDecision; ldc.i4.1 beq AFTER; ldc.i4.2 beq CONTINUE` |
-| `GameCtrl.UpdateCtrl` | 第 2 个 `RegistNote` 的 `break(leave)` 前 | 第 2 个 `callvirt RegistNote` 后的 `leave` | `ldarg.0; ldloc V_8(note); callvirt __SoflanLogRegistNoteFailed(note)` |
 | `GameProcess.OnUpdate` | 方法起始 | 首条指令 | `call __SoflanUpdateGamePlayFumenController()` |
 
 **派发控制流说明** (`UpdateCtrl` 可见性): `__SoflanNoteDecision` 返回 `0`=非 soflan(fall-through 走原 msec 检查), `1`=soflan 可见(跳 `AFTER`=原检查通过后的 RegistNote 处理), `2`=soflan 不可见(跳 `CONTINUE`=MoveNext)。`AFTER`=`blt` 后一条, `CONTINUE`=`blt` 跳转目标(MoveNext), 与原 `continue` 目标一致。

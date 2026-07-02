@@ -2,8 +2,7 @@
 // 对应 head 中无法用 orig_ 表达的"方法体中间插入":
 //   1. NotesReader.loadMa2Main : calcBPMList 前 __SoflanClearAll ; calcTotal 后 __SoflanLoadComposition
 //   2. NotesReader.loadNote    : ret 前 __SoflanLoadNote(noteData, rec, this)
-//   3. GameCtrl.UpdateCtrl     : UserOption 后 __SoflanClearCache ; msec 检查前 __SoflanNoteDecision 派发 ;
-//                                 第2个 RegistNote 的 break 前 __SoflanLogRegistNoteFailed
+//   3. GameCtrl.UpdateCtrl     : UserOption 后 __SoflanClearCache ; msec 检查前 __SoflanNoteDecision 派发
 //   4. GameProcess.OnUpdate    : 方法起始 __SoflanUpdateGamePlayFumenController
 // 锚点基于被检视的真实 base IL (Mono.Cecil). 插入调用引用的辅助方法由 patch_ 类复制进目标类型.
 using System;
@@ -152,7 +151,6 @@ namespace MonoMod
             var il = body.GetILProcessor();
             var clearCache = GetOwnMethod(type, "__SoflanClearCache");
             var decision = GetOwnMethod(type, "__SoflanNoteDecision");
-            var logFailed = GetOwnMethod(type, "__SoflanLogRegistNoteFailed");
 
             // (a) UserOption 字段赋值后插入 ldarg.0 callvirt __SoflanClearCache
             //     锚点: ldfld GameScoreList::UserOption (唯一). InsertAfter 逆序: [ldarg.0, callvirt]
@@ -270,42 +268,6 @@ namespace MonoMod
             catch (Exception ex)
             {
                 System.Console.WriteLine("[SoflanRules] UpdateCtrl (b) dispatch failed: " + ex.Message);
-            }
-
-            // (c) 第 2 个 RegistNote 失败 break 前 插入 ldarg.0 ldloc(note) callvirt __SoflanLogRegistNoteFailed
-            //     note = RegistNote 调用前一条 ldloc (note 实参). 失败时 graceful skip.
-            try
-            {
-                var instrs = body.Instructions;
-                var registNotes = body.Instructions.Where(i => IsCallTo(i, "RegistNote")).ToList();
-                if (registNotes.Count < 2)
-                {
-                    System.Console.WriteLine("[SoflanRules] UpdateCtrl: expected >=2 RegistNote calls, got " + registNotes.Count + ", skip (c)");
-                }
-                else
-                {
-                    var secondRegist = registNotes[1];
-                    int sIdx = instrs.IndexOf(secondRegist);
-                    // 前一条应为 ldloc(note)
-                    var noteArgInstr = instrs[sIdx - 1];
-                    if (noteArgInstr.OpCode != OpCodes.Ldloc && noteArgInstr.OpCode != OpCodes.Ldloc_S)
-                        throw new Exception("[SoflanRules] UpdateCtrl: RegistNote note-arg ldloc not found");
-                    var noteArgVar = (VariableDefinition)noteArgInstr.Operand;
-                    // 向后跳过 brtrue/brtrue.s, 找到 leave/leave.s (break)
-                    int j = sIdx + 1;
-                    while (j < instrs.Count && (instrs[j].OpCode == OpCodes.Brtrue || instrs[j].OpCode == OpCodes.Brtrue_S)) j++;
-                    if (j >= instrs.Count || (instrs[j].OpCode != OpCodes.Leave && instrs[j].OpCode != OpCodes.Leave_S))
-                        throw new Exception("[SoflanRules] UpdateCtrl: RegistNote break(leave) not found");
-                    var leaveInstr = instrs[j];
-                    // InsertBefore 正序: [ldarg.0, ldloc note, callvirt]  (书写顺序即执行顺序)
-                    il.InsertBefore(leaveInstr, il.Create(OpCodes.Ldarg_0));
-                    il.InsertBefore(leaveInstr, il.Create(OpCodes.Ldloc, noteArgVar));
-                    il.InsertBefore(leaveInstr, il.Create(OpCodes.Callvirt, logFailed));
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Console.WriteLine("[SoflanRules] UpdateCtrl (c) logFailed failed: " + ex.Message);
             }
         }
 

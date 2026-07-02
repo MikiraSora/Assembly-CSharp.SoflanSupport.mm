@@ -7,7 +7,7 @@
 // 显示: 当前播放时间(ms + mm:ss.fff) / 变速组0 当前倍率 / FPS / (可选)所有 group 倍率。
 // F8 切换面板显示/隐藏。位置: 屏幕左上角。
 //
-// 性能: 数据在 Update 每帧更新一次 (OnGUI 一帧多调, 复用缓存); _allSpeeds 复用零 List 分配;
+// 性能: 数据在 Update 中节流刷新 (OnGUI 一帧多调, 复用缓存); _allSpeeds 复用零 List 分配;
 // GroupSpeed 为值类型无堆分配; 面板隐藏时 OnGUI 直接 return。
 using System.Collections.Generic;
 using MAI2.Util;
@@ -29,6 +29,11 @@ namespace SoflanSupport
         private float _fps;
         private float _fpsSmooth;
         private float _copyFeedbackTime;   // 复制按钮点击时刻, 用于显示"已复制"提示
+        private float _nextDataRefreshTime;
+
+        private const float DataRefreshInterval = 0.2f;
+        private const int MaxDisplayedGroups = 50;
+        private const int MaxSelectHitCount = 128;
 
         // 复用的 group 倍率缓冲 (避免每帧 new List)
         private readonly List<SoflanManager.GroupSpeed> _allSpeeds = new List<SoflanManager.GroupSpeed>();
@@ -50,6 +55,9 @@ namespace SoflanSupport
         private static NoteBase _selectedNote;
         private static int _cycleIndex;
         private static int _lastHitCount;
+        private static readonly Collider2D[] _selectHits = new Collider2D[MaxSelectHitCount];
+        private static readonly List<NoteBase> _selectNotes = new List<NoteBase>(MaxSelectHitCount);
+        private static readonly System.Comparison<NoteBase> _noteInstanceComparer = CompareNoteInstanceId;
 
         // patch_NoteBase 查询本实例是否被选中.
         public static bool IsNoteSelected(NoteBase nb) => _selectedNote == nb;
@@ -94,6 +102,9 @@ namespace SoflanSupport
 
         private void Update()
         {
+            if (!_visible && _selectedNote == null)
+                return;
+
             ClearStaleSelectedNote();
 
             // FPS 平滑
@@ -105,6 +116,15 @@ namespace SoflanSupport
                 _fps = _fpsSmooth;
             }
 
+            if (Time.realtimeSinceStartup < _nextDataRefreshTime)
+            {
+                if (Input.GetMouseButtonDown(1))
+                    HandleSelectClick();
+                return;
+            }
+
+            _nextDataRefreshTime = Time.realtimeSinceStartup + DataRefreshInterval;
+
             try
             {
                 _msec = NotesManager.GetCurrentMsec();
@@ -113,17 +133,19 @@ namespace SoflanSupport
                 if (_hasData)
                 {
                     _speed0 = sm.GetCurrentSpeed(0, _msec);
-                    if (_showAllGroups) sm.FillCurrentSpeeds(_msec, _allSpeeds);
+                    if (_showAllGroups) sm.FillCurrentSpeeds(_msec, _allSpeeds, MaxDisplayedGroups);
                 }
                 else
                 {
                     _speed0 = 1.0;
+                    _allSpeeds.Clear();
                 }
             }
             catch
             {
                 _hasData = false;
                 _speed0 = 1.0;
+                _allSpeeds.Clear();
             }
 
             // 右键点击选中 Tap (不干扰左键触摸判定)
@@ -145,24 +167,32 @@ namespace SoflanSupport
             if (t < 0f) return;
             Vector2 world2d = new Vector2(ray.origin.x + ray.direction.x * t, ray.origin.y + ray.direction.y * t);
 
-            var hits = Physics2D.OverlapPointAll(world2d);
-            var notes = new List<NoteBase>();
-            foreach (var c in hits)
+            int hitCount = Physics2D.OverlapPointNonAlloc(world2d, _selectHits);
+            _selectNotes.Clear();
+            for (var i = 0; i < hitCount; i++)
             {
+                var c = _selectHits[i];
+                _selectHits[i] = null;
                 var nb = c.GetComponentInParent<NoteBase>();
-                if (nb != null) notes.Add(nb);
+                if (nb != null) _selectNotes.Add(nb);
             }
-            if (notes.Count == 0) return;
-            notes.Sort((a, b) => a.GetInstanceID().CompareTo(b.GetInstanceID()));
+            if (_selectNotes.Count == 0) return;
+            _selectNotes.Sort(_noteInstanceComparer);
 
             // 命中集合数量变 → 从头选; 否则循环到下一个 (依次选择重叠 note).
-            if (notes.Count != _lastHitCount) _cycleIndex = 0;
-            else _cycleIndex = (_cycleIndex + 1) % notes.Count;
-            _lastHitCount = notes.Count;
+            if (_selectNotes.Count != _lastHitCount) _cycleIndex = 0;
+            else _cycleIndex = (_cycleIndex + 1) % _selectNotes.Count;
+            _lastHitCount = _selectNotes.Count;
 
             // 仅切换 _selectedNote; 旧 note 的呼吸色由其 NoteCheck 检测 IsNoteSelected==false 后自动恢复.
-            _selectedNote = notes[_cycleIndex];
+            _selectedNote = _selectNotes[_cycleIndex];
+            _selectNotes.Clear();
             HasSelectedData = false;  // 清旧数据, 等 GetNoteYPosition_soflan 重新填充
+        }
+
+        private static int CompareNoteInstanceId(NoteBase a, NoteBase b)
+        {
+            return a.GetInstanceID().CompareTo(b.GetInstanceID());
         }
 
         private void OnGUI()
@@ -187,6 +217,8 @@ namespace SoflanSupport
             {
                 foreach (var kv in _allSpeeds)
                     GUILayout.Label($"  group{kv.Group}: {kv.Speed:F3}x");
+                if (_allSpeeds.Count >= MaxDisplayedGroups)
+                    GUILayout.Label($"  showing first {MaxDisplayedGroups} groups");
             }
 
             if (HasSelectedData)
@@ -225,6 +257,8 @@ namespace SoflanSupport
                 sb.AppendLine("All group speeds:");
                 foreach (var kv in _allSpeeds)
                     sb.AppendLine($"  group{kv.Group}: {kv.Speed:F3}x");
+                if (_allSpeeds.Count >= MaxDisplayedGroups)
+                    sb.AppendLine($"  showing first {MaxDisplayedGroups} groups");
             }
             if (HasSelectedData)
             {

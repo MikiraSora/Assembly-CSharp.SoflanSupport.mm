@@ -9,7 +9,6 @@ using OngekiFumenEditor.Core.Modules.FumenVisualEditor;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace SoflanSupport
 {
@@ -24,6 +23,8 @@ namespace SoflanSupport
         private float cachedCalculatedApperMsec = float.MinValue;
         private int visibleRangeCacheVersion = 0;
         private Dictionary<int, VisibleMsecRangeCache> visibleRangeListMap = new();
+        private float cachedCurrentSoflanTimeMsec = float.MinValue;
+        private Dictionary<int, float> cachedCurrentSoflanTimeMap = new();
 
         /// <summary>
         /// clear all
@@ -38,6 +39,7 @@ namespace SoflanSupport
             cachedCalculatedApperMsec = float.MinValue;
             visibleRangeCacheVersion = 0;
             visibleRangeListMap.Clear();
+            clearCurrentSoflanTimeCache();
 
             registerNoteIndexToSoflanGroupMap.Clear();
 
@@ -48,8 +50,10 @@ namespace SoflanSupport
         {
             if (noteData == null)
                 return;
-            foreach (var str in record._str.AsEnumerable().Reverse())
+
+            for (var i = record._str.Count - 1; i >= 0; i--)
             {
+                var str = record._str[i];
                 if (str?.StartsWith("#") ?? false)
                 {
                     if (!int.TryParse(str.TrimStart('#').Trim(), out var soflanGroup))
@@ -73,13 +77,11 @@ namespace SoflanSupport
                 return;
             }
 
-            foreach (var line in File.ReadAllLines(filePath))
+            foreach (var line in File.ReadLines(filePath))
             {
                 if (line.StartsWith("SFL", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    var split = line.Split('\t').Select(x => x.Trim()).ToArray();
-
-                    if (!tryParseSoflan(split, out var soflan))
+                    if (!tryParseSoflan(line, out var soflan))
                     {
                         PatchLog.WriteLine($"parse soflan failed, line content:{line}");
                         break;
@@ -125,28 +127,47 @@ namespace SoflanSupport
             PatchLog.WriteLine($"---------------------------------------");
         }
 
-        private bool tryParseSoflan(string[] paramList, out ISoflan soflan)
+        private bool tryParseSoflan(string line, out ISoflan soflan)
         {
             try
             {
                 soflan = new Soflan()
                 {
-                    TGrid = new TGrid(int.Parse(paramList.ElementAtOrDefault(1)), int.Parse(paramList.ElementAtOrDefault(2))),
-                    Speed = float.Parse(paramList.ElementAtOrDefault(4)),
+                    TGrid = new TGrid(int.Parse(GetTabField(line, 1)), int.Parse(GetTabField(line, 2))),
+                    Speed = float.Parse(GetTabField(line, 4)),
                     SoflanGroup = 0
                 };
-                soflan.EndTGrid = soflan.TGrid + new GridOffset(0, int.Parse(paramList.ElementAtOrDefault(3)));
-                var soflanGroup = paramList.ElementAtOrDefault(5);
+                soflan.EndTGrid = soflan.TGrid + new GridOffset(0, int.Parse(GetTabField(line, 3)));
+                var soflanGroup = GetTabField(line, 5);
                 if (!string.IsNullOrWhiteSpace(soflanGroup))
                     soflan.SoflanGroup = int.Parse(soflanGroup);
                 return true;
             }
-            catch (Exception e)
+            catch
             {
                 //todo log ex
                 soflan = default;
                 return false;
             }
+        }
+
+        private static string GetTabField(string line, int fieldIndex)
+        {
+            var start = 0;
+            var currentIndex = 0;
+            for (var i = 0; i <= line.Length; i++)
+            {
+                if (i < line.Length && line[i] != '\t')
+                    continue;
+
+                if (currentIndex == fieldIndex)
+                    return line.Substring(start, i - start).Trim();
+
+                start = i + 1;
+                currentIndex++;
+            }
+
+            return null;
         }
 
         public bool containsSoflans()
@@ -191,7 +212,7 @@ namespace SoflanSupport
         public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec)
         {
             var soflanGroup = getNoteSoflanGroup(noteData);
-            var currentSoflanTime = ConvertAudioTimeToY_PreviewMode(currentMsec, soflanGroup);
+            var currentSoflanTime = GetCurrentSoflanTimeCached(currentMsec, soflanGroup);
             return checkNoteVisible(noteData, currentMsec, apperMsec, soflanGroup, currentSoflanTime);
         }
 
@@ -274,6 +295,29 @@ namespace SoflanSupport
             return (float)TGridCalculator.ConvertAudioTimeToY_PreviewMode(TimeSpan.FromMilliseconds(msec), getSoflanList(soflanGroup), bpmList, 1);
         }
 
+        public void clearCurrentSoflanTimeCache()
+        {
+            cachedCurrentSoflanTimeMsec = float.MinValue;
+            cachedCurrentSoflanTimeMap.Clear();
+        }
+
+        public float GetCurrentSoflanTimeCached(float currentMsec, int soflanGroup)
+        {
+            if (cachedCurrentSoflanTimeMsec != currentMsec)
+            {
+                cachedCurrentSoflanTimeMsec = currentMsec;
+                cachedCurrentSoflanTimeMap.Clear();
+            }
+
+            if (!cachedCurrentSoflanTimeMap.TryGetValue(soflanGroup, out var soflanTime))
+            {
+                soflanTime = ConvertAudioTimeToY_PreviewMode(currentMsec, soflanGroup);
+                cachedCurrentSoflanTimeMap[soflanGroup] = soflanTime;
+            }
+
+            return soflanTime;
+        }
+
         // 调试面板用: soflan 组号 + 当前变速倍率 (值类型, 零堆分配).
         public struct GroupSpeed
         {
@@ -294,14 +338,18 @@ namespace SoflanSupport
         }
 
         // 把所有 soflan 组的 (group, currentSpeed) 写入调用方复用的 outList (Clear 后追加), 零 List 分配。
-        public void FillCurrentSpeeds(float audioMsec, List<GroupSpeed> outList)
+        public void FillCurrentSpeeds(float audioMsec, List<GroupSpeed> outList, int maxCount = int.MaxValue)
         {
             outList.Clear();
             if (!containSoflans) return;
             var tGrid = TGridCalculator.ConvertAudioTimeToTGrid(
                 TimeSpan.FromMilliseconds(audioMsec), bpmList);
             foreach (KeyValuePair<int, SoflanList> pair in soflanListMap)
+            {
+                if (outList.Count >= maxCount)
+                    break;
                 outList.Add(new GroupSpeed(pair.Key, pair.Value.CalculateSpeed(bpmList, tGrid)));
+            }
         }
 
         public void DumpCurrent(int currentTime = -1)

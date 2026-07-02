@@ -23,6 +23,7 @@ namespace Monitor
     {
         private SoflanManager soflanManager;
         private bool isInSoflan;
+        private int noteSoflanGroup;
         private float noteSoflanTime;
 
 #if DEBUG
@@ -57,7 +58,16 @@ namespace Monitor
             //Soflan Support
             soflanManager = Singleton<SoflanManager>.Instance;
             isInSoflan = soflanManager.containsSoflans();
-            noteSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, soflanManager.getNoteSoflanGroup(NoteIndex));
+            if (isInSoflan)
+            {
+                noteSoflanGroup = soflanManager.getNoteSoflanGroup(NoteIndex);
+                noteSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, noteSoflanGroup);
+            }
+            else
+            {
+                noteSoflanGroup = 0;
+                noteSoflanTime = AppearMsec;
+            }
         }
 
         protected extern void orig_NoteCheck();
@@ -109,7 +119,7 @@ namespace Monitor
 
         private float GetSoflanTimeDiff()
         {
-            var currentSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(NotesManager.GetCurrentMsec(), soflanManager.getNoteSoflanGroup(NoteIndex));
+            var currentSoflanTime = soflanManager.GetCurrentSoflanTimeCached(NotesManager.GetCurrentMsec(), noteSoflanGroup);
             return noteSoflanTime - currentSoflanTime;
         }
 

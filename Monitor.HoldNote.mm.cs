@@ -44,14 +44,13 @@ namespace Monitor
         {
             if (holdIsInSoflan && CheckSupportSoflan())
             {
-                float currentSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(
-                    NotesManager.GetCurrentMsec(),
-                    holdSoflanGroup);
+                float currentMsec = NotesManager.GetCurrentMsec();
+                float currentSoflanTime = holdSoflanManager.GetCurrentSoflanTimeCached(currentMsec, holdSoflanGroup);
 
                 float headDiffTime = holdHeadSoflanTime - currentSoflanTime;
                 float tailDiffTime = holdTailSoflanTime - currentSoflanTime;
 
-                ExecuteSoflanVisual(headDiffTime, tailDiffTime);
+                ExecuteSoflanVisual(headDiffTime, tailDiffTime, currentMsec);
                 orig_NoteCheck();
                 ApplySoflanScale(headDiffTime);
                 return;
@@ -68,7 +67,7 @@ namespace Monitor
 
             if (holdIsInSoflan && CheckSupportSoflan())
             {
-                float currentSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                float currentSoflanTime = holdSoflanManager.GetCurrentSoflanTimeCached(
                     NotesManager.GetCurrentMsec(),
                     holdSoflanGroup);
 
@@ -76,7 +75,7 @@ namespace Monitor
             }
         }
 
-        private void ExecuteSoflanVisual(float headDiffTime, float tailDiffTime)
+        private void ExecuteSoflanVisual(float headDiffTime, float tailDiffTime, float currentMsec)
         {
             if (EndFlag)
             {
@@ -102,7 +101,7 @@ namespace Monitor
             }
             else
             {
-                if (TailMsec <= NotesManager.GetCurrentMsec())
+                if (TailMsec <= currentMsec)
                 {
                     NoteObj.transform.localPosition = new Vector3(0f, EndPos, GetBaseZPosition());
                     SpriteRender.size = new Vector2(SpriteRender.size.x, DefaultHeight);

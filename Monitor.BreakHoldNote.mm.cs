@@ -44,14 +44,13 @@ namespace Monitor
         {
             if (breakHoldIsInSoflan && CheckSupportSoflan())
             {
-                float currentSoflanTime = breakHoldSoflanManager.ConvertAudioTimeToY_PreviewMode(
-                    NotesManager.GetCurrentMsec(),
-                    breakHoldSoflanGroup);
+                float currentMsec = NotesManager.GetCurrentMsec();
+                float currentSoflanTime = breakHoldSoflanManager.GetCurrentSoflanTimeCached(currentMsec, breakHoldSoflanGroup);
 
                 float headDiffTime = breakHoldHeadSoflanTime - currentSoflanTime;
                 float tailDiffTime = breakHoldTailSoflanTime - currentSoflanTime;
 
-                ExecuteSoflanVisual(headDiffTime, tailDiffTime);
+                ExecuteSoflanVisual(headDiffTime, tailDiffTime, currentMsec);
                 orig_NoteCheck();
                 ApplySoflanScale(headDiffTime);
                 return;
@@ -68,7 +67,7 @@ namespace Monitor
 
             if (breakHoldIsInSoflan && CheckSupportSoflan())
             {
-                float currentSoflanTime = breakHoldSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                float currentSoflanTime = breakHoldSoflanManager.GetCurrentSoflanTimeCached(
                     NotesManager.GetCurrentMsec(),
                     breakHoldSoflanGroup);
 
@@ -76,7 +75,7 @@ namespace Monitor
             }
         }
 
-        private void ExecuteSoflanVisual(float headDiffTime, float tailDiffTime)
+        private void ExecuteSoflanVisual(float headDiffTime, float tailDiffTime, float currentMsec)
         {
             if (EndFlag)
             {
@@ -102,7 +101,7 @@ namespace Monitor
             }
             else
             {
-                if (TailMsec <= NotesManager.GetCurrentMsec())
+                if (TailMsec <= currentMsec)
                 {
                     NoteObj.transform.localPosition = new Vector3(0f, EndPos, GetBaseZPosition());
                     SpriteRender.size = new Vector2(SpriteRender.size.x, DefaultHeight);

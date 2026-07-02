@@ -113,7 +113,7 @@ var visibleRanges = soflanList.Value
 - `Monitor.Game.GameCtrl.mm.cs:45`
 
 现象:
-`PatchLog.WriteLine()` 使用字符串插值、`File.AppendAllText()` 和 `UnityEngine.Debug.Log()`。多数日志发生在加载阶段, 但 `__SoflanLogRegistNoteFailed()` 位于 `GameCtrl.UpdateCtrl` 的运行路径, RegistNote 失败时可在播放中触发。
+`PatchLog.WriteLine()` 使用字符串插值、`File.AppendAllText()` 和 `UnityEngine.Debug.Log()`。当前运行期 `GameCtrl.UpdateCtrl` 的 `RegistNote` 失败诊断钩子已移除, 日志主要集中在加载阶段和手动调试路径。
 
 影响:
 播放中 GC 暂停时, 如果频繁触发失败日志, 托管字符串会累积, 文件也会增长, IO 还可能卡顿。

@@ -12,6 +12,7 @@ namespace Monitor
     {
         private SoflanManager breakSoflanManager;
         private bool breakIsInSoflan;
+        private int breakSoflanGroup;
         private float breakNoteSoflanTime;
 
         public extern void orig_Initialize(NoteData note);
@@ -22,9 +23,16 @@ namespace Monitor
 
             breakSoflanManager = Singleton<SoflanManager>.Instance;
             breakIsInSoflan = breakSoflanManager.containsSoflans();
-            breakNoteSoflanTime = breakIsInSoflan
-                ? breakSoflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, breakSoflanManager.getNoteSoflanGroup(NoteIndex))
-                : AppearMsec;
+            if (breakIsInSoflan)
+            {
+                breakSoflanGroup = breakSoflanManager.getNoteSoflanGroup(NoteIndex);
+                breakNoteSoflanTime = breakSoflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, breakSoflanGroup);
+            }
+            else
+            {
+                breakSoflanGroup = 0;
+                breakNoteSoflanTime = AppearMsec;
+            }
         }
 
         protected extern void orig_NoteCheck();
@@ -44,9 +52,9 @@ namespace Monitor
 
         private float GetBreakSoflanTimeDiff()
         {
-            var currentSoflanTime = breakSoflanManager.ConvertAudioTimeToY_PreviewMode(
+            var currentSoflanTime = breakSoflanManager.GetCurrentSoflanTimeCached(
                 NotesManager.GetCurrentMsec(),
-                breakSoflanManager.getNoteSoflanGroup(NoteIndex));
+                breakSoflanGroup);
             return breakNoteSoflanTime - currentSoflanTime;
         }
 
