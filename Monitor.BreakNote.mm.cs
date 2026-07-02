@@ -37,6 +37,7 @@ namespace Monitor
             {
                 var absDiffTime = Math.Abs(GetBreakSoflanTimeDiff());
                 var scale = Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
+                scale *= Singleton<GamePlayManager>.Instance.GetGameScore(MonitorId).UserOption.NoteSize.GetValue();
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
         }

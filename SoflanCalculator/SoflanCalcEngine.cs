@@ -156,6 +156,26 @@ namespace SoflanCalculator
             float scaleStartTime = 2f * defaultMsec - maiBugAdjustMSec;
             float moveStartTime = defaultMsec - maiBugAdjustMSec;
 
+            // offsetYAdj (与游戏一致, 但 sign=0 故 adjustedSoflanY == soflanY)
+            float offsetYAdj = (endPos - startPos) * (-1f / 120f) * (speedRatio - 1f);
+            float guideScaleAdj = 0f;
+
+            float insideY = startPos;
+            float outsideY = endPos + (endPos - startPos);
+
+            float soflanY = MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
+            // sign = 0 (与游戏当前代码一致)
+            float adjustedSoflanY = soflanY; // + sign * offsetYAdj  (sign=0)
+
+            float clipedSoflanY = Math.Max(120f, Math.Min(680f, adjustedSoflanY));
+
+            float moveProgress = (clipedSoflanY - startPos) / (endPos - startPos);
+            moveProgress = Math.Max(0, moveProgress); // always >= 0
+
+            float guideScale = 0.75f * moveProgress;
+            float adjustedGuideScale = guideScale + guideScaleAdj;
+            float finalScale = 0.25f + adjustedGuideScale;
+
             NoteStat noteStat = NoteStat.Init;
 
             if (absDiffTime > scaleStartTime)
@@ -170,26 +190,6 @@ namespace SoflanCalculator
             {
                 noteStat = NoteStat.Move;
             }
-
-            // offsetYAdj (与游戏一致, 但 sign=0 故 adjustedSoflanY == soflanY)
-            float offsetYAdj = (endPos - startPos) * (-1f / 120f) * (speedRatio - 1f);
-            float guideScaleAdj = 0f;
-
-            float moveProgress = MathUtils.MapValue(diffTime, 0, moveStartTime, 1, 0, false);
-            moveProgress = Math.Max(0, moveProgress); // always >= 0
-
-            float guideScale = 0.75f * moveProgress;
-            float adjustedGuideScale = guideScale + guideScaleAdj;
-            float finalScale = 0.25f + adjustedGuideScale;
-
-            float insideY = startPos;
-            float outsideY = endPos + (endPos - startPos);
-
-            float soflanY = MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
-            // sign = 0 (与游戏当前代码一致)
-            float adjustedSoflanY = soflanY; // + sign * offsetYAdj  (sign=0)
-
-            float clipedSoflanY = Math.Max(120f, Math.Min(680f, adjustedSoflanY));
 
             return new CalcResult
             {

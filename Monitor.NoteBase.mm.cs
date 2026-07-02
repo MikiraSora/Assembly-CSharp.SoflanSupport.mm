@@ -84,6 +84,7 @@ namespace Monitor
                 var absDiffTime = Math.Abs(GetSoflanTimeDiff());
 
                 var scale = Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
+                scale *= Singleton<GamePlayManager>.Instance.GetGameScore(MonitorId).UserOption.NoteSize.GetValue();
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
 
@@ -183,7 +184,44 @@ namespace Monitor
             var scaleStartTime = 2 * DefaultMsec - GetMaiBugAdjustMSec();
             var moveStartTime = DefaultMsec - GetMaiBugAdjustMSec();
 
-            var offsetYAdj = 0f;
+            var speedRatio = Singleton<GamePlayManager>.Instance
+                          .GetGameScore(MonitorId)
+                          .UserOption
+                          .GetNoteSpeed
+                          .GetValue() / 150f;
+
+            /*  强制重新计算Guide物件缩放
+                diffTime = moveStartTime             0             -moveStartTime
+                             ---|--------------------|--------------------|---
+                  finalScale = 0.25                  1                   1.75
+                              StartPos              EndPos      EndPos + (EndPos - StartPos)
+             */
+
+            var offsetYAdj = (EndPos - StartPos) * (-1f / 120f) * (speedRatio - 1f);
+            var guideScaleAdj = 0; //(-1f / 120f) * (speedRatio - 1f) * 0.75f;
+
+            /*  强制重新计算物件pos位置
+                diffTime = moveStartTime             0             -moveStartTime
+                             ---|--------------------|--------------------|---
+                      soflanY = 120                  400                  680
+                             StartPos              EndPos      EndPos + (EndPos - StartPos)
+             */
+            var insideY = StartPos;
+            var outsideY = EndPos + (EndPos - StartPos);
+
+            var soflanY = MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
+            //todo 可能有问题
+            var sign = 0;// currentTime > AppearMsec ? 0 : Math.Sign(diffTime);
+            var adjustedSoflanY = soflanY + sign * offsetYAdj;
+
+            var clipedSoflanY = Mathf.Clamp(adjustedSoflanY, 120, 680);
+
+            var moveProgress = (clipedSoflanY - StartPos) / (EndPos - StartPos);
+            moveProgress = Math.Max(0, moveProgress); // always >= 0
+
+            var guideScale = 0.75f * moveProgress;
+            var adjustedGuideScale = guideScale + guideScaleAdj;
+            var finalScale = 0.25f + adjustedGuideScale;
 
             if (absDiffTime > scaleStartTime)
             {
@@ -198,62 +236,19 @@ namespace Monitor
                 if (NoteGuideTrans != null)
                 {
                     var scaleProgress = MathUtils.MapValue(absDiffTime, scaleStartTime, moveStartTime, 0, 1);
-                    NoteGuideTrans.localScale = new Vector3(0.25f, 0.25f, 1f);
+                    NoteGuideTrans.localScale = new Vector3(finalScale, finalScale, 1f);
                     GuideObj.SetAlpha(scaleProgress);
                 }
             }
             else
             {
                 NoteStat = NoteStatus.Move;
-            }
-
-            var speedRatio = Singleton<GamePlayManager>.Instance
-                          .GetGameScore(MonitorId)
-                          .UserOption
-                          .GetNoteSpeed
-                          .GetValue() / 150f;
-
-            /*  强制重新计算Guide物件缩放
-                diffTime = moveStartTime             0             -moveStartTime
-                             ---|--------------------|--------------------|---
-                  finalScale = 0.25                  1                   0.175
-                             StartPos              EndPos      EndPos + (EndPos - StartPos)
-             */
-
-            offsetYAdj = (EndPos - StartPos) * (-1f / 120f) * (speedRatio - 1f);
-            var guideScaleAdj = 0; //(-1f / 120f) * (speedRatio - 1f) * 0.75f;
-
-            var moveProgress = MathUtils.MapValue(diffTime, 0, moveStartTime, 1, 0, false);
-            moveProgress = Math.Max(0, moveProgress); // always >= 0
-
-            var guideScale = 0.75f * moveProgress;
-            var adjustedGuideScale = guideScale + guideScaleAdj;
-            var finalScale = 0.25f + adjustedGuideScale;
-
-            if (NoteStat == NoteStatus.Move)
-            {
                 if (NoteGuideTrans != null)
                 {
                     NoteGuideTrans.localScale = new Vector3(finalScale, finalScale, 1f);
                     GuideObj.SetAlpha(1);
                 }
             }
-
-            /*  强制重新计算物件pos位置
-                diffTime = moveStartTime             0             -moveStartTime
-                             ---|--------------------|--------------------|---
-                     soflanY = 120                  400                  680
-                             StartPos              EndPos      EndPos + (EndPos - StartPos)
-             */
-            var insideY = StartPos;
-            var outsideY = EndPos + (EndPos - StartPos);
-
-            var soflanY = MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
-            //todo 可能有问题
-            var sign = 0;// currentTime > AppearMsec ? 0 : Math.Sign(diffTime);
-            var adjustedSoflanY = soflanY + sign * offsetYAdj;
-
-            var clipedSoflanY = Mathf.Clamp(adjustedSoflanY, 120, 680);
 
 #if DEBUG
             // 调试面板: 选中本 note 时, 把所有计算变量导出到面板 (struct 值类型, 零堆分配).
