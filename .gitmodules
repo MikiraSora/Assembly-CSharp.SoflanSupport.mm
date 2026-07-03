@@ -1,0 +1,3 @@
+[submodule "Dependencies/SimpleSoflanFramework"]
+	path = Dependencies/SimpleSoflanFramework
+	url = https://github.com/NyagekiFumenProject/SimpleSoflanFramework

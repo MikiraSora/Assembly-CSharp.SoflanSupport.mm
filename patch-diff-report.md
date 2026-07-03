@@ -8,7 +8,7 @@
 ## 外部依赖
 
 新增的 `SoflanSupport/*` 类型引用外部程序集 **`SimpleSoflanFramework.Core.dll`**, 它提供 `OngekiFumenEditor.Core.*` 命名空间 (`TGrid` / `TGridCalculator` / `Soflan` / `SoflanList` / `SoflanListMap` / `BpmList` / `BPMChange` / `MathUtils` 等)。该 DLL 位于:
-`C:\Users\mikir\source\repos\SimpleSoflanFramework\SimpleSoflanFramework.Core\bin\Debug\SimpleSoflanFramework.Core.dll`
+`Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core\bin\Debug\SimpleSoflanFramework.Core.dll`
 
 **运行时部署要求 (resolver 方案)**: 修补后的 `Assembly-CSharp` 注入了引用 `OngekiFumenEditor.Core.*` 的新类型, 但 `BepInEx/monomod/` 只是 patch 输入目录、非运行时探测路径, 故运行时首次触碰注入类型会因找不到 `SimpleSoflanFramework.Core` 而 `TypeLoadException`。为此 patch 内置运行时依赖解析器 `SoflanSupport.DependencyAssemblyResolver` (普通新类型, 整体复制进 target): 挂 `AppDomain.AssemblyResolve`, 仅对白名单 `{SimpleSoflanFramework.Core}` 从 ① resolver 自身目录 ② `BepInEx/monomod/` 加载。Mount 由 `MonoModRules` 在 4 个目标方法 (`loadMa2Main`/`loadNote`/`UpdateCtrl`/`OnUpdate`) 起始注入 `call Register()` (幂等), 保证在首次引用任何注入类型之前挂载; **不使用** `[RuntimeInitializeOnLoadMethod]` (BepInEx 修补后的程序集不触发)。因此只需将 `SimpleSoflanFramework.Core.dll` 与 `.mm.dll` 同放 `BepInEx/monomod/`, 无需复制到 `Sinmai_Data\Managed\`。`SimpleSoflanFramework.Core` 仅引用 mscorlib/System/System.Core, 无第三方传递依赖。
 

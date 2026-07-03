@@ -21,6 +21,9 @@
     <Compile Remove="SoflanCalculator\**\*.cs" />
     <None Remove="SoflanCalculator\**" />
     <ProjectReference Remove="SoflanCalculator\**" />
+    <Compile Remove="Dependencies\**\*.cs" />
+    <None Remove="Dependencies\**" />
+    <ProjectReference Remove="Dependencies\**" />
     <Compile Remove="_decompiled\**\*.cs" />
     <None Remove="_decompiled\**" />
   </ItemGroup>
@@ -31,8 +34,8 @@
       <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- 外部依赖: 提供 OngekiFumenEditor.Core.* 命名空间. 运行时需部署到 Managed -->
-    <ProjectReference Include="C:\Users\mikir\source\repos\SimpleSoflanFramework\SimpleSoflanFramework.Core\SimpleSoflanFramework.Core.csproj">
+    <!-- 外部依赖: 提供 OngekiFumenEditor.Core.* 命名空间. 运行时需随 .mm.dll 部署 -->
+    <ProjectReference Include="Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core\SimpleSoflanFramework.Core.csproj">
       <Private>false</Private>
     </ProjectReference>
     <!-- Unity 运行时类型 -->
