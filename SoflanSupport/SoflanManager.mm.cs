@@ -182,32 +182,10 @@ namespace SoflanSupport
 
         //-------------------------------------------
 
-        private struct VisibleMsecRange
-        {
-            public VisibleMsecRange(float minMSec, TGrid minTGrid, float maxMSec, TGrid maxTGrid)
-            {
-                MinMSec = minMSec;
-                MinTGrid = minTGrid;
-                MaxMSec = maxMSec;
-                MaxTGrid = maxTGrid;
-            }
-
-            public float MinMSec { get; }
-            public TGrid MinTGrid { get; }
-            public float MaxMSec { get; }
-            public TGrid MaxTGrid { get; }
-
-            public bool Contain(float msec)
-            {
-                return MinMSec <= msec && msec <= MaxMSec;
-            }
-        }
-
         private sealed class VisibleMsecRangeCache
         {
             public int Version;
-            public readonly List<VisibleMsecRange> Ranges = new List<VisibleMsecRange>();
-            public readonly List<SoflanList.VisibleTGridRange> VisibleTGridRanges = new List<SoflanList.VisibleTGridRange>();
+            public readonly List<SoflanList.VisibleMsecRange> Ranges = new List<SoflanList.VisibleMsecRange>();
             public readonly SoflanList.VisibleRangeQueryScratch VisibleRangeScratch = new SoflanList.VisibleRangeQueryScratch();
         }
 
@@ -265,7 +243,7 @@ namespace SoflanSupport
             }
         }
 
-        private List<VisibleMsecRange> GetVisibleRangeList(int soflanGroup, float currentSoflanTime, float apperMsec)
+        private List<SoflanList.VisibleMsecRange> GetVisibleRangeList(int soflanGroup, float currentSoflanTime, float apperMsec)
         {
             if (!visibleRangeListMap.TryGetValue(soflanGroup, out var cache))
             {
@@ -280,13 +258,7 @@ namespace SoflanSupport
 
             // Lazy per-group rebuild: only groups touched by notes in this frame are recalculated.
             var soflanList = getSoflanList(soflanGroup);
-            soflanList.FillVisibleRangesForGamePreview(currentSoflanTime, apperMsec, bpmList, cache.VisibleTGridRanges, cache.VisibleRangeScratch);
-            foreach (var x in cache.VisibleTGridRanges)
-            {
-                var minMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.minTGrid, bpmList).TotalMilliseconds;
-                var maxMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.maxTGrid, bpmList).TotalMilliseconds;
-                cache.Ranges.Add(new VisibleMsecRange(minMsec, x.minTGrid, maxMsec, x.maxTGrid));
-            }
+            soflanList.FillVisibleMsecRangesForGamePreview(currentSoflanTime, apperMsec, bpmList, cache.Ranges, cache.VisibleRangeScratch);
 
             cache.Version = visibleRangeCacheVersion;
             return cache.Ranges;
@@ -376,7 +348,7 @@ namespace SoflanSupport
             {
                 PatchLog.WriteLine($"[{pair.Key}]:");
                 foreach (var visibleRange in pair.Value.Ranges)
-                    PatchLog.WriteLine($"\t\t{visibleRange.MinTGrid}({visibleRange.MinMSec}ms) ~ {visibleRange.MaxTGrid}({visibleRange.MaxMSec}ms), current:{ConvertAudioTimeToY_PreviewMode(cachedCalculatedCurrentMsec, pair.Key)}");
+                    PatchLog.WriteLine($"\t\t{visibleRange.MinMsec}ms ~ {visibleRange.MaxMsec}ms, current:{ConvertAudioTimeToY_PreviewMode(cachedCalculatedCurrentMsec, pair.Key)}");
             }
         }
     }
