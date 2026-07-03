@@ -207,6 +207,8 @@ namespace SoflanSupport
         {
             public int Version;
             public readonly List<VisibleMsecRange> Ranges = new List<VisibleMsecRange>();
+            public readonly List<SoflanList.VisibleTGridRange> VisibleTGridRanges = new List<SoflanList.VisibleTGridRange>();
+            public readonly SoflanList.VisibleRangeQueryScratch VisibleRangeScratch = new SoflanList.VisibleRangeQueryScratch();
         }
 
         public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec)
@@ -278,8 +280,8 @@ namespace SoflanSupport
 
             // Lazy per-group rebuild: only groups touched by notes in this frame are recalculated.
             var soflanList = getSoflanList(soflanGroup);
-            var visibleRanges = soflanList.GetVisibleRanges_PreviewMode(currentSoflanTime, apperMsec, 0, bpmList, 1);
-            foreach (var x in visibleRanges)
+            soflanList.FillVisibleRangesForGamePreview(currentSoflanTime, apperMsec, bpmList, cache.VisibleTGridRanges, cache.VisibleRangeScratch);
+            foreach (var x in cache.VisibleTGridRanges)
             {
                 var minMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.minTGrid, bpmList).TotalMilliseconds;
                 var maxMsec = (float)TGridCalculator.ConvertTGridToAudioTime(x.maxTGrid, bpmList).TotalMilliseconds;
