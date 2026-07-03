@@ -10,10 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="SimpleSoflanFramework.Core">
-      <HintPath>$(MSBuildThisFileDirectory)SimpleSoflanFramework.Core.dll</HintPath>
+    <ProjectReference Include="C:\Users\mikir\source\repos\SimpleSoflanFramework\SimpleSoflanFramework.Core\SimpleSoflanFramework.Core.csproj">
       <Private>true</Private>
-    </Reference>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>
