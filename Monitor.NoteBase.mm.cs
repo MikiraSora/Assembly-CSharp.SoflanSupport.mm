@@ -25,6 +25,8 @@ namespace Monitor
         private bool isInSoflan;
         private int noteSoflanGroup;
         private float noteSoflanTime;
+        private bool isFixedSoflanToUnifiedSpeed;
+        private float fixedSoflanUnifiedSpeed;
 
 #if DEBUG
         // --- 调试面板选中 (右键点击 Tap) ---
@@ -68,6 +70,13 @@ namespace Monitor
                 noteSoflanGroup = 0;
                 noteSoflanTime = AppearMsec;
             }
+
+            var fixedNote = (patch_NoteData)note;
+            isFixedSoflanToUnifiedSpeed = fixedNote.isFixedSoflanToUnifiedSpeed
+                && FixedSoflan.IsSupportedTapKind(note.type.getEnum());
+            fixedSoflanUnifiedSpeed = fixedNote.fixedSoflanUnifiedSpeed > 0f
+                ? fixedNote.fixedSoflanUnifiedSpeed
+                : FixedSoflan.DefaultUnifiedSpeed;
         }
 
         protected extern void orig_NoteCheck();
@@ -93,7 +102,9 @@ namespace Monitor
                 */
                 var absDiffTime = Math.Abs(GetSoflanTimeDiff());
 
-                var scale = Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
+                var scale = isFixedSoflanToUnifiedSpeed
+                    ? FixedSoflan.GetScaleProgress(absDiffTime, fixedSoflanUnifiedSpeed)
+                    : Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
                 scale *= Singleton<GamePlayManager>.Instance.GetGameScore(MonitorId).UserOption.NoteSize.GetValue();
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
@@ -191,8 +202,18 @@ namespace Monitor
             var diffTime = GetSoflanTimeDiff();
             var absDiffTime = Math.Abs(diffTime);
 
-            var scaleStartTime = 2 * DefaultMsec - GetMaiBugAdjustMSec();
-            var moveStartTime = DefaultMsec - GetMaiBugAdjustMSec();
+            var scaleStartTime = isFixedSoflanToUnifiedSpeed
+                ? FixedSoflan.GetScaleStartTime(fixedSoflanUnifiedSpeed)
+                : 2 * DefaultMsec - GetMaiBugAdjustMSec();
+            var moveStartTime = isFixedSoflanToUnifiedSpeed
+                ? FixedSoflan.GetMoveStartTime(fixedSoflanUnifiedSpeed)
+                : DefaultMsec - GetMaiBugAdjustMSec();
+            var fixedMotionProgress = isFixedSoflanToUnifiedSpeed
+                ? FixedSoflan.GetMotionProgress(diffTime, fixedSoflanUnifiedSpeed)
+                : 0f;
+            var fixedScaleProgress = isFixedSoflanToUnifiedSpeed
+                ? FixedSoflan.GetScaleProgress(absDiffTime, fixedSoflanUnifiedSpeed)
+                : 0f;
 
             var speedRatio = Singleton<GamePlayManager>.Instance
                           .GetGameScore(MonitorId)
@@ -219,7 +240,9 @@ namespace Monitor
             var insideY = StartPos;
             var outsideY = EndPos + (EndPos - StartPos);
 
-            var soflanY = MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
+            var soflanY = isFixedSoflanToUnifiedSpeed
+                ? FixedSoflan.GetYFromMotionProgress(StartPos, EndPos, fixedMotionProgress)
+                : MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
             //todo 可能有问题
             var sign = 0;// currentTime > AppearMsec ? 0 : Math.Sign(diffTime);
             var adjustedSoflanY = soflanY + sign * offsetYAdj;
@@ -245,7 +268,9 @@ namespace Monitor
                 NoteStat = NoteStatus.Scale;
                 if (NoteGuideTrans != null)
                 {
-                    var scaleProgress = MathUtils.MapValue(absDiffTime, scaleStartTime, moveStartTime, 0, 1);
+                    var scaleProgress = isFixedSoflanToUnifiedSpeed
+                        ? fixedScaleProgress
+                        : MathUtils.MapValue(absDiffTime, scaleStartTime, moveStartTime, 0, 1);
                     NoteGuideTrans.localScale = new Vector3(finalScale, finalScale, 1f);
                     GuideObj.SetAlpha(scaleProgress);
                 }
@@ -278,6 +303,10 @@ namespace Monitor
                     OutsideY = outsideY,
                     SoflanY = soflanY,
                     ClipedSoflanY = clipedSoflanY,
+                    IsFixedSoflanToUnifiedSpeed = isFixedSoflanToUnifiedSpeed,
+                    FixedSoflanUnifiedSpeed = fixedSoflanUnifiedSpeed,
+                    FixedMotionProgress = fixedMotionProgress,
+                    FixedScaleProgress = fixedScaleProgress,
                 };
                 SoflanPanelBehaviour.HasSelectedData = true;
             }

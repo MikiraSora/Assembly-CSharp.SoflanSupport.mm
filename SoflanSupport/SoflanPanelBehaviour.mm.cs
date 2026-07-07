@@ -46,6 +46,8 @@ namespace SoflanSupport
             public double DiffTime, AbsDiffTime;
             public float ScaleStartTime, MoveStartTime, MoveProgress, FinalScale;
             public float InsideY, OutsideY, SoflanY, ClipedSoflanY;
+            public bool IsFixedSoflanToUnifiedSpeed;
+            public float FixedSoflanUnifiedSpeed, FixedMotionProgress, FixedScaleProgress;
             public NoteBase.NoteStatus NoteStat;
         }
         public static SelectedNoteData SelectedData;
@@ -208,7 +210,7 @@ namespace SoflanSupport
 
             // 右上角: x = 屏幕宽 - 面板宽 - 右边距 10
             float panelW = 300f;
-            GUILayout.BeginArea(new Rect(Screen.width - panelW - 10f, 10f, panelW, 400f), "Soflan Monitor (F8 | 右键选Tap)", GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - panelW - 10f, 10f, panelW, 440f), "Soflan Monitor (F8 | 右键选Tap)", GUI.skin.box);
             GUILayout.Label($"PlayTime: {_msec:F1} ms  ({timeStr})");
             GUILayout.Label($"SoflanGroup0 Speed: {_speed0:F3}x" + (_hasData ? "" : " (no data)"));
             GUILayout.Label($"FPS: {_fps:F1}");
@@ -229,6 +231,8 @@ namespace SoflanSupport
                 GUILayout.Label($"diffTime: {d.DiffTime:F3}  absDiffTime: {d.AbsDiffTime:F3}");
                 GUILayout.Label($"scaleStartTime: {d.ScaleStartTime:F3}  moveStartTime: {d.MoveStartTime:F3}");
                 GUILayout.Label($"moveProgress: {d.MoveProgress:F3}  finalScale: {d.FinalScale:F3}");
+                GUILayout.Label($"Fixed: {d.IsFixedSoflanToUnifiedSpeed}  FixedSpd: {d.FixedSoflanUnifiedSpeed:F3}");
+                GUILayout.Label($"FixedMoveP: {d.FixedMotionProgress:F3}  FixedScaleP: {d.FixedScaleProgress:F3}");
                 GUILayout.Label($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
                 GUILayout.Label($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
             }
@@ -268,6 +272,8 @@ namespace SoflanSupport
                 sb.AppendLine($"diffTime: {d.DiffTime:F3}  absDiffTime: {d.AbsDiffTime:F3}");
                 sb.AppendLine($"scaleStartTime: {d.ScaleStartTime:F3}  moveStartTime: {d.MoveStartTime:F3}");
                 sb.AppendLine($"moveProgress: {d.MoveProgress:F3}  finalScale: {d.FinalScale:F3}");
+                sb.AppendLine($"Fixed: {d.IsFixedSoflanToUnifiedSpeed}  FixedSpd: {d.FixedSoflanUnifiedSpeed:F3}");
+                sb.AppendLine($"FixedMoveP: {d.FixedMotionProgress:F3}  FixedScaleP: {d.FixedScaleProgress:F3}");
                 sb.AppendLine($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
                 sb.AppendLine($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
             }

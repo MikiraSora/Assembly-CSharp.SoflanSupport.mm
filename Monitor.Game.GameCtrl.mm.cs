@@ -30,7 +30,10 @@ namespace Monitor.Game
             var currentMsec = NotesManager.GetCurrentMsec();
             var noteSoflanGroup = soflanManager.getNoteSoflanGroup(note);
             var soflanTime = soflanManager.GetCurrentSoflanTimeCached(currentMsec, noteSoflanGroup);
-            if (!soflanManager.checkNoteVisible(note, currentMsec, num, noteSoflanGroup, soflanTime))
+            var visibleMsec = FixedSoflan.IsEnabledForNote(note)
+                ? FixedSoflan.GetVisibleMsec(FixedSoflan.GetUnifiedSpeed(note))
+                : num;
+            if (!soflanManager.checkNoteVisible(note, currentMsec, visibleMsec, noteSoflanGroup, soflanTime))
                 return 2;
             return 1;
         }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Soflan Design"
+  short_description: "Design and modify Soflan speed features."
+  default_prompt: "Use $design-generate-soflan-skill to design or modify a Soflan speed-change feature."

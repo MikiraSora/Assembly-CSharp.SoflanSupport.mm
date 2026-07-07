@@ -8,6 +8,7 @@ using OngekiFumenEditor.Core.Base.OngekiObjects;
 using OngekiFumenEditor.Core.Modules.FumenVisualEditor;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 
 namespace SoflanSupport
@@ -51,21 +52,102 @@ namespace SoflanSupport
             if (noteData == null)
                 return;
 
-            for (var i = record._str.Count - 1; i >= 0; i--)
-            {
-                var str = record._str[i];
-                if (str?.StartsWith("#") ?? false)
-                {
-                    if (!int.TryParse(str.TrimStart('#').Trim(), out var soflanGroup))
-                    {
-                        PatchLog.WriteLine($"register noteIndex:{noteData.indexNote} failed, str:{str}");
-                        return;
-                    }
+            var fixedNoteData = (patch_NoteData)noteData;
+            fixedNoteData.isFixedSoflanToUnifiedSpeed = false;
+            fixedNoteData.fixedSoflanUnifiedSpeed = FixedSoflan.DefaultUnifiedSpeed;
 
-                    registerNoteIndexToSoflanGroupMap[noteData.indexNote] = soflanGroup;
-                    PatchLog.WriteLine($"register noteIndex:{noteData.indexNote}, soflanGroup:{soflanGroup}");
+            string marker = null;
+            for (var i = 0; i < record._str.Count; i++)
+            {
+                var str = record._str[i]?.Trim();
+                if (!(str?.StartsWith("#") ?? false))
+                    continue;
+
+                if (marker != null)
+                {
+                    FailSoflanMarker(noteData, str, $"multiple soflan markers are not allowed: first={marker}, second={str}");
                 }
+
+                marker = str;
             }
+
+            if (marker == null)
+                return;
+
+            ParseSoflanMarker(noteData, marker, out var soflanGroup, out var isFixedSoflan, out var fixedSoflanUnifiedSpeed);
+
+            registerNoteIndexToSoflanGroupMap[noteData.indexNote] = soflanGroup;
+            fixedNoteData.isFixedSoflanToUnifiedSpeed = isFixedSoflan;
+            fixedNoteData.fixedSoflanUnifiedSpeed = fixedSoflanUnifiedSpeed;
+
+            PatchLog.WriteLine(
+                $"register noteIndex:{noteData.indexNote}, soflanGroup:{soflanGroup}, fixedSoflan:{isFixedSoflan}, fixedSoflanSpeed:{fixedSoflanUnifiedSpeed.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        private static void ParseSoflanMarker(
+            NoteData noteData,
+            string marker,
+            out int soflanGroup,
+            out bool isFixedSoflan,
+            out float fixedSoflanUnifiedSpeed)
+        {
+            soflanGroup = 0;
+            isFixedSoflan = false;
+            fixedSoflanUnifiedSpeed = FixedSoflan.DefaultUnifiedSpeed;
+
+            var normalizedMarker = marker.Trim();
+            if (!normalizedMarker.StartsWith("#"))
+                FailSoflanMarker(noteData, marker, "soflan marker must start with #");
+
+            var token = normalizedMarker.Substring(1);
+            if (string.IsNullOrEmpty(token))
+                FailSoflanMarker(noteData, marker, "empty soflan marker");
+
+            for (var i = 0; i < token.Length; i++)
+            {
+                if (char.IsWhiteSpace(token[i]))
+                    FailSoflanMarker(noteData, marker, "whitespace is not supported inside soflan marker");
+            }
+
+            var fIndex = token.IndexOf('F');
+            var lowerFIndex = token.IndexOf('f');
+            if (fIndex < 0 || (lowerFIndex >= 0 && lowerFIndex < fIndex))
+                fIndex = lowerFIndex;
+
+            if (fIndex < 0)
+            {
+                if (!int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out soflanGroup))
+                    FailSoflanMarker(noteData, marker, "invalid soflan group");
+                return;
+            }
+
+            var groupText = token.Substring(0, fIndex);
+            if (!string.IsNullOrEmpty(groupText)
+                && !int.TryParse(groupText, NumberStyles.Integer, CultureInfo.InvariantCulture, out soflanGroup))
+            {
+                FailSoflanMarker(noteData, marker, "invalid fixed soflan group");
+            }
+
+            isFixedSoflan = true;
+
+            var speedText = token.Substring(fIndex + 1);
+            if (string.IsNullOrEmpty(speedText))
+                return;
+
+            if (!float.TryParse(speedText, NumberStyles.Float, CultureInfo.InvariantCulture, out fixedSoflanUnifiedSpeed)
+                || float.IsNaN(fixedSoflanUnifiedSpeed)
+                || float.IsInfinity(fixedSoflanUnifiedSpeed)
+                || fixedSoflanUnifiedSpeed <= 0f)
+            {
+                FailSoflanMarker(noteData, marker, "fixed soflan speed must be a positive number");
+            }
+        }
+
+        private static void FailSoflanMarker(NoteData noteData, string marker, string reason)
+        {
+            var message = $"register noteIndex:{noteData.indexNote} failed, marker:{marker}, reason:{reason}";
+            PatchLog.WriteLine(message);
+            throw new FormatException(message);
         }
 
         public void loadComposition(MA2RecordList records, NotesReader sr)

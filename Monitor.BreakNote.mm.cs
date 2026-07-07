@@ -14,6 +14,8 @@ namespace Monitor
         private bool breakIsInSoflan;
         private int breakSoflanGroup;
         private float breakNoteSoflanTime;
+        private bool breakIsFixedSoflanToUnifiedSpeed;
+        private float breakFixedSoflanUnifiedSpeed;
 
         public extern void orig_Initialize(NoteData note);
 
@@ -33,6 +35,13 @@ namespace Monitor
                 breakSoflanGroup = 0;
                 breakNoteSoflanTime = AppearMsec;
             }
+
+            var fixedNote = (patch_NoteData)note;
+            breakIsFixedSoflanToUnifiedSpeed = fixedNote.isFixedSoflanToUnifiedSpeed
+                && FixedSoflan.IsSupportedTapKind(note.type.getEnum());
+            breakFixedSoflanUnifiedSpeed = fixedNote.fixedSoflanUnifiedSpeed > 0f
+                ? fixedNote.fixedSoflanUnifiedSpeed
+                : FixedSoflan.DefaultUnifiedSpeed;
         }
 
         protected extern void orig_NoteCheck();
@@ -44,7 +53,9 @@ namespace Monitor
             if (breakIsInSoflan && CheckSupportSoflan() && !EndFlag)
             {
                 var absDiffTime = Math.Abs(GetBreakSoflanTimeDiff());
-                var scale = Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
+                var scale = breakIsFixedSoflanToUnifiedSpeed
+                    ? FixedSoflan.GetScaleProgress(absDiffTime, breakFixedSoflanUnifiedSpeed)
+                    : Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
                 scale *= Singleton<GamePlayManager>.Instance.GetGameScore(MonitorId).UserOption.NoteSize.GetValue();
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
