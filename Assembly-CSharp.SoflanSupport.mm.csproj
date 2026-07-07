@@ -26,6 +26,12 @@
     <ProjectReference Remove="Dependencies\**" />
     <Compile Remove="_decompiled\**\*.cs" />
     <None Remove="_decompiled\**" />
+    <Compile Remove="tools\**\*.cs" />
+    <None Remove="tools\**" />
+    <ProjectReference Remove="tools\**" />
+    <Compile Remove="tmp_ma2_export_check\**\*.cs" />
+    <None Remove="tmp_ma2_export_check\**" />
+    <ProjectReference Remove="tmp_ma2_export_check\**" />
   </ItemGroup>
 
   <ItemGroup>

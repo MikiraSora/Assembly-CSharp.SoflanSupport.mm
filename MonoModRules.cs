@@ -89,6 +89,29 @@ namespace MonoMod
                    && ins.Operand is MethodReference mr && mr.Name == calleeName;
         }
 
+        private static bool TryGetLdlocVariable(Mono.Cecil.Cil.MethodBody body, Instruction ins, out VariableDefinition variable)
+        {
+            variable = null;
+            if (ins.OpCode == OpCodes.Ldloc || ins.OpCode == OpCodes.Ldloc_S)
+            {
+                variable = ins.Operand as VariableDefinition;
+                return variable != null;
+            }
+
+            int index;
+            if (ins.OpCode == OpCodes.Ldloc_0) index = 0;
+            else if (ins.OpCode == OpCodes.Ldloc_1) index = 1;
+            else if (ins.OpCode == OpCodes.Ldloc_2) index = 2;
+            else if (ins.OpCode == OpCodes.Ldloc_3) index = 3;
+            else return false;
+
+            if (index < 0 || index >= body.Variables.Count)
+                return false;
+
+            variable = body.Variables[index];
+            return true;
+        }
+
         // ---------------- 1. NotesReader.loadMa2Main ----------------
         private static void PatchLoadMa2Main(ModuleDefinition module)
         {
@@ -177,18 +200,18 @@ namespace MonoMod
                 for (int i = 0; i + 6 < instrs.Count; i++)
                 {
                     if (!IsCallTo(instrs[i], "GetCurrentMsec")) continue;
-                    if (instrs[i + 1].OpCode != OpCodes.Ldloc && instrs[i + 1].OpCode != OpCodes.Ldloc_S) continue;
+                    if (!TryGetLdlocVariable(body, instrs[i + 1], out var candidateNoteVar)) continue;
                     if (!(instrs[i + 2].OpCode == OpCodes.Ldflda && instrs[i + 2].Operand is FieldReference f2 && f2.Name == "time")) continue;
                     if (!IsCallTo(instrs[i + 3], "get_msec")) continue;
-                    if (instrs[i + 4].OpCode != OpCodes.Ldloc && instrs[i + 4].OpCode != OpCodes.Ldloc_S) continue;
+                    if (!TryGetLdlocVariable(body, instrs[i + 4], out var candidateNumVar)) continue;
                     if (instrs[i + 5].OpCode != OpCodes.Sub) continue;
 
                     // 旧: sub; blt.un* CONTINUE  (blt 跳 CONTINUE=不可见; fall-through=AFTER=可见)
                     if (instrs[i + 6].OpCode == OpCodes.Blt_Un || instrs[i + 6].OpCode == OpCodes.Blt_Un_S)
                     {
                         gcmIdx = i;
-                        noteVar = (VariableDefinition)instrs[i + 1].Operand;
-                        numVar = (VariableDefinition)instrs[i + 4].Operand;
+                        noteVar = candidateNoteVar;
+                        numVar = candidateNumVar;
                         continueTarget = (Instruction)instrs[i + 6].Operand;
                         afterTarget = instrs[i + 7];
                         break;
@@ -196,14 +219,14 @@ namespace MonoMod
                     // 新: sub; clt.un; stloc; ldloc; brfalse.s AFTER; br CONTINUE
                     if (instrs[i + 6].OpCode == OpCodes.Clt_Un && i + 9 < instrs.Count
                         && (instrs[i + 7].OpCode == OpCodes.Stloc || instrs[i + 7].OpCode == OpCodes.Stloc_S)
-                        && (instrs[i + 8].OpCode == OpCodes.Ldloc || instrs[i + 8].OpCode == OpCodes.Ldloc_S)
+                        && TryGetLdlocVariable(body, instrs[i + 8], out _)
                         && (instrs[i + 9].OpCode == OpCodes.Brfalse || instrs[i + 9].OpCode == OpCodes.Brfalse_S)
                         && i + 10 < instrs.Count
                         && (instrs[i + 10].OpCode == OpCodes.Br || instrs[i + 10].OpCode == OpCodes.Br_S))
                     {
                         gcmIdx = i;
-                        noteVar = (VariableDefinition)instrs[i + 1].Operand;
-                        numVar = (VariableDefinition)instrs[i + 4].Operand;
+                        noteVar = candidateNoteVar;
+                        numVar = candidateNumVar;
                         afterTarget = (Instruction)instrs[i + 9].Operand;      // brfalse 目标 = 可见(AFTER)
                         continueTarget = (Instruction)instrs[i + 10].Operand;  // br 目标 = 不可见(CONTINUE)
                         break;

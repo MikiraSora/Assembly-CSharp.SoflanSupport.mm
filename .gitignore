@@ -11,6 +11,7 @@ obj/
 
 # Staging / 临时产物: 含游戏 DLL 与 patched 程序集, 不入库
 staging/
+tmp_ma2_export_check/
 
 # 日志
 *.log
