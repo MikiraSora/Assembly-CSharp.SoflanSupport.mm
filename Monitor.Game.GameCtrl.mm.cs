@@ -27,6 +27,9 @@ namespace Monitor.Game
             var soflanManager = Singleton<SoflanManager>.Instance;
             if (!soflanManager.containsSoflans())
                 return 0;
+            if (!SoflanManager.IsSupportedVisualSoflanKind(note.type.getEnum()))
+                return 0;
+
             var currentMsec = NotesManager.GetCurrentMsec();
             var noteSoflanGroup = soflanManager.getNoteSoflanGroup(note);
             var soflanTime = soflanManager.GetCurrentSoflanTimeCached(currentMsec, noteSoflanGroup);

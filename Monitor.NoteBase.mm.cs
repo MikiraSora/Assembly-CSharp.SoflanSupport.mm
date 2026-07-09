@@ -86,7 +86,7 @@ namespace Monitor
         {
             orig_NoteCheck();
 
-            if (isInSoflan && !EndFlag)
+            if (isInSoflan && checkSupportSoflan() && !EndFlag)
             {
                 //recalculate scale in soflan
                 /* absDiffTime数值含义:

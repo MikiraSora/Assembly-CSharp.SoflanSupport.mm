@@ -28,7 +28,8 @@ namespace Monitor
             if (breakIsInSoflan)
             {
                 breakSoflanGroup = breakSoflanManager.getNoteSoflanGroup(NoteIndex);
-                breakNoteSoflanTime = breakSoflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, breakSoflanGroup);
+                var noteAudioMsec = breakSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
+                breakNoteSoflanTime = breakSoflanManager.ConvertAudioTimeToY_PreviewMode(noteAudioMsec, breakSoflanGroup);
             }
             else
             {

@@ -27,8 +27,10 @@ namespace Monitor
             if (holdIsInSoflan)
             {
                 holdSoflanGroup = holdSoflanManager.getNoteSoflanGroup(NoteIndex);
-                holdHeadSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, holdSoflanGroup);
-                holdTailSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(TailMsec, holdSoflanGroup);
+                var headAudioMsec = holdSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
+                var tailAudioMsec = holdSoflanManager.getNoteEndAudioMsecForSoflan(NoteIndex, TailMsec);
+                holdHeadSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(headAudioMsec, holdSoflanGroup);
+                holdTailSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(tailAudioMsec, holdSoflanGroup);
             }
             else
             {

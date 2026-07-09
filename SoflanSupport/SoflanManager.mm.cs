@@ -20,6 +20,7 @@ namespace SoflanSupport
         private bool containSoflans = false;
         private Dictionary<int, int> registerNoteIndexToSoflanGroupMap = new();
         private Dictionary<int, TGrid> registerNoteIndexToSoflanTGridMap = new();
+        private Dictionary<int, TGrid> registerNoteIndexToSoflanEndTGridMap = new();
 
         private float cachedCalculatedCurrentMsec = float.MinValue;
         private float cachedCalculatedApperMsec = float.MinValue;
@@ -45,6 +46,7 @@ namespace SoflanSupport
 
             registerNoteIndexToSoflanGroupMap.Clear();
             registerNoteIndexToSoflanTGridMap.Clear();
+            registerNoteIndexToSoflanEndTGridMap.Clear();
 
             PatchLog.WriteLine("SoflanManager cleared");
         }
@@ -57,6 +59,11 @@ namespace SoflanSupport
             var fixedNoteData = (patch_NoteData)noteData;
             fixedNoteData.isFixedSoflanToUnifiedSpeed = false;
             fixedNoteData.fixedSoflanUnifiedSpeed = FixedSoflan.DefaultUnifiedSpeed;
+
+            if (TryReadRecordTGrid(record, out var noteTGrid) || TryReadNotesTimeTGrid(noteData.time, sr, out noteTGrid))
+                registerNoteIndexToSoflanTGridMap[noteData.indexNote] = noteTGrid;
+            if (HasMeaningfulEndTime(noteData) && TryReadNotesTimeTGrid(noteData.end, sr, out var noteEndTGrid))
+                registerNoteIndexToSoflanEndTGridMap[noteData.indexNote] = noteEndTGrid;
 
             string marker = null;
             for (var i = 0; i < record._str.Count; i++)
@@ -79,8 +86,6 @@ namespace SoflanSupport
             ParseSoflanMarker(noteData, marker, out var soflanGroup, out var isFixedSoflan, out var fixedSoflanUnifiedSpeed);
 
             registerNoteIndexToSoflanGroupMap[noteData.indexNote] = soflanGroup;
-            if (TryReadRecordTGrid(record, out var noteTGrid))
-                registerNoteIndexToSoflanTGridMap[noteData.indexNote] = noteTGrid;
             fixedNoteData.isFixedSoflanToUnifiedSpeed = isFixedSoflan;
             fixedNoteData.fixedSoflanUnifiedSpeed = fixedSoflanUnifiedSpeed;
 
@@ -102,6 +107,28 @@ namespace SoflanSupport
 
             tGrid = new TGrid(grid, unit);
             return true;
+        }
+
+        private static bool TryReadNotesTimeTGrid(NotesTime notesTime, NotesReader sr, out TGrid tGrid)
+        {
+            tGrid = default;
+            if (sr == null)
+                return false;
+
+            try
+            {
+                tGrid = notesTime.ToTGrid(sr);
+                return tGrid != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool HasMeaningfulEndTime(NoteData noteData)
+        {
+            return noteData.end.grid != 0 || noteData.end.msec != 0f;
         }
 
         private static void ParseSoflanMarker(
@@ -277,6 +304,29 @@ namespace SoflanSupport
             return containSoflans;
         }
 
+        public static bool IsSupportedVisualSoflanKind(NotesTypeID.Def noteKind)
+        {
+            switch (noteKind)
+            {
+                case NotesTypeID.Def.Begin:
+                case NotesTypeID.Def.Break:
+                case NotesTypeID.Def.ExTap:
+                case NotesTypeID.Def.Star:
+                case NotesTypeID.Def.BreakStar:
+                case NotesTypeID.Def.ExStar:
+                case NotesTypeID.Def.TouchTap:
+                case NotesTypeID.Def.ExBreakTap:
+                case NotesTypeID.Def.ExBreakStar:
+                case NotesTypeID.Def.Hold:
+                case NotesTypeID.Def.ExHold:
+                case NotesTypeID.Def.BreakHold:
+                case NotesTypeID.Def.ExBreakHold:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public SoflanList getSoflanList(int soflanGroup)
         {
             return soflanListMap[soflanGroup];
@@ -334,6 +384,26 @@ namespace SoflanSupport
         public float getNoteAudioMsecForSoflan(int noteIndex, float fallbackMsec)
         {
             if (!registerNoteIndexToSoflanTGridMap.TryGetValue(noteIndex, out var tGrid))
+                return fallbackMsec;
+
+            try
+            {
+                return (float)TGridCalculator.ConvertTGridToAudioTime(tGrid, bpmList).TotalMilliseconds;
+            }
+            catch
+            {
+                return fallbackMsec;
+            }
+        }
+
+        public float getNoteEndAudioMsecForSoflan(NoteData noteData)
+        {
+            return noteData == null ? 0f : getNoteEndAudioMsecForSoflan(noteData.indexNote, noteData.end.msec);
+        }
+
+        public float getNoteEndAudioMsecForSoflan(int noteIndex, float fallbackMsec)
+        {
+            if (!registerNoteIndexToSoflanEndTGridMap.TryGetValue(noteIndex, out var tGrid))
                 return fallbackMsec;
 
             try

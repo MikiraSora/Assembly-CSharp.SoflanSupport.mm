@@ -19,10 +19,12 @@ namespace Monitor
         {
             orig_Initialize(note);
 
-            NoteKind = NotesTypeID.Def.TouchTap;
+            var noteKind = note.type.getEnum();
+            if (noteKind == NotesTypeID.Def.TouchTap)
+                NoteKind = NotesTypeID.Def.TouchTap;
 
             touchSoflanManager = Singleton<SoflanManager>.Instance;
-            touchIsInSoflan = touchSoflanManager.containsSoflans();
+            touchIsInSoflan = touchSoflanManager.containsSoflans() && noteKind == NotesTypeID.Def.TouchTap;
             if (touchIsInSoflan)
             {
                 touchSoflanGroup = touchSoflanManager.getNoteSoflanGroup(NoteIndex);
