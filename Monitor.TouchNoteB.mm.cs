@@ -19,12 +19,15 @@ namespace Monitor
         {
             orig_Initialize(note);
 
+            NoteKind = NotesTypeID.Def.TouchTap;
+
             touchSoflanManager = Singleton<SoflanManager>.Instance;
             touchIsInSoflan = touchSoflanManager.containsSoflans();
             if (touchIsInSoflan)
             {
                 touchSoflanGroup = touchSoflanManager.getNoteSoflanGroup(NoteIndex);
-                touchNoteSoflanTime = touchSoflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, touchSoflanGroup);
+                var noteAudioMsec = touchSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
+                touchNoteSoflanTime = touchSoflanManager.ConvertAudioTimeToY_PreviewMode(noteAudioMsec, touchSoflanGroup);
             }
             else
             {

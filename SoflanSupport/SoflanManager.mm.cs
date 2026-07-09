@@ -19,6 +19,7 @@ namespace SoflanSupport
         private BpmList bpmList = new BpmList();
         private bool containSoflans = false;
         private Dictionary<int, int> registerNoteIndexToSoflanGroupMap = new();
+        private Dictionary<int, TGrid> registerNoteIndexToSoflanTGridMap = new();
 
         private float cachedCalculatedCurrentMsec = float.MinValue;
         private float cachedCalculatedApperMsec = float.MinValue;
@@ -43,6 +44,7 @@ namespace SoflanSupport
             clearCurrentSoflanTimeCache();
 
             registerNoteIndexToSoflanGroupMap.Clear();
+            registerNoteIndexToSoflanTGridMap.Clear();
 
             PatchLog.WriteLine("SoflanManager cleared");
         }
@@ -77,11 +79,29 @@ namespace SoflanSupport
             ParseSoflanMarker(noteData, marker, out var soflanGroup, out var isFixedSoflan, out var fixedSoflanUnifiedSpeed);
 
             registerNoteIndexToSoflanGroupMap[noteData.indexNote] = soflanGroup;
+            if (TryReadRecordTGrid(record, out var noteTGrid))
+                registerNoteIndexToSoflanTGridMap[noteData.indexNote] = noteTGrid;
             fixedNoteData.isFixedSoflanToUnifiedSpeed = isFixedSoflan;
             fixedNoteData.fixedSoflanUnifiedSpeed = fixedSoflanUnifiedSpeed;
 
             PatchLog.WriteLine(
                 $"register noteIndex:{noteData.indexNote}, soflanGroup:{soflanGroup}, fixedSoflan:{isFixedSoflan}, fixedSoflanSpeed:{fixedSoflanUnifiedSpeed.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        private static bool TryReadRecordTGrid(MA2Record record, out TGrid tGrid)
+        {
+            tGrid = default;
+            if (record?._str == null || record._str.Count < 3)
+                return false;
+
+            if (!int.TryParse(record._str[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var grid))
+                return false;
+
+            if (!int.TryParse(record._str[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var unit))
+                return false;
+
+            tGrid = new TGrid(grid, unit);
+            return true;
         }
 
         private static void ParseSoflanMarker(
@@ -287,7 +307,7 @@ namespace SoflanSupport
                 return false;
 
             // foreach 替代 LINQ Any, 避免每帧闭包/委托/迭代器分配 (热路径零分配).
-            var msec = noteData.time.msec;
+            var msec = getNoteAudioMsecForSoflan(noteData);
             foreach (var range in visibleRangeList)
             {
                 if (range.Contain(msec))
@@ -304,6 +324,26 @@ namespace SoflanSupport
         public int getNoteSoflanGroup(NoteData noteData)
         {
             return getNoteSoflanGroup(noteData.indexNote);
+        }
+
+        public float getNoteAudioMsecForSoflan(NoteData noteData)
+        {
+            return noteData == null ? 0f : getNoteAudioMsecForSoflan(noteData.indexNote, noteData.time.msec);
+        }
+
+        public float getNoteAudioMsecForSoflan(int noteIndex, float fallbackMsec)
+        {
+            if (!registerNoteIndexToSoflanTGridMap.TryGetValue(noteIndex, out var tGrid))
+                return fallbackMsec;
+
+            try
+            {
+                return (float)TGridCalculator.ConvertTGridToAudioTime(tGrid, bpmList).TotalMilliseconds;
+            }
+            catch
+            {
+                return fallbackMsec;
+            }
         }
 
         private void BeginVisibleRangeFrame(float currentMsec, float apperMsec)

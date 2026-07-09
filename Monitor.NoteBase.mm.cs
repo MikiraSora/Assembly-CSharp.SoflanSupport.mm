@@ -63,7 +63,8 @@ namespace Monitor
             if (isInSoflan)
             {
                 noteSoflanGroup = soflanManager.getNoteSoflanGroup(NoteIndex);
-                noteSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(AppearMsec, noteSoflanGroup);
+                var noteAudioMsec = soflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
+                noteSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(noteAudioMsec, noteSoflanGroup);
             }
             else
             {
