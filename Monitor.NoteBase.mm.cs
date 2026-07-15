@@ -36,11 +36,61 @@ namespace Monitor
         private bool _colorSaved;
 #endif
 
+#if DEBUG
+        private bool _guideAssignedSinceLastInitialize;
+
+        public extern void orig_SetGuideObject(NoteGuide guideObj);
+
+        public void SetGuideObject(NoteGuide guideObj)
+        {
+            _guideAssignedSinceLastInitialize = true;
+            orig_SetGuideObject(guideObj);
+            GuideDiagnostics.OnNoteSetGuide(this, guideObj);
+        }
+
+        protected void OnEnable()
+        {
+            GuideDiagnostics.OnNoteEnabled(this, NoteIndex, NeedGuide, GuideObj, EndFlag, NoteStat);
+        }
+
+        protected void OnDisable()
+        {
+            GuideDiagnostics.OnNoteDisabled(this, NoteIndex, NeedGuide, GuideObj, EndFlag, NoteStat);
+        }
+#endif
+
         public extern void orig_Initialize(NoteData note);
 
         public void Initialize(NoteData note)
         {
+#if DEBUG
+            var guideAssignedThisCycle = _guideAssignedSinceLastInitialize;
+            _guideAssignedSinceLastInitialize = false;
+            GuideDiagnostics.OnNoteInitializeBefore(
+                this,
+                note,
+                NeedGuide,
+                GuideObj,
+                guideAssignedThisCycle,
+                NoteIndex);
+            try
+            {
+                orig_Initialize(note);
+            }
+            catch (Exception exception)
+            {
+                GuideDiagnostics.OnNoteInitializeFailed(
+                    this,
+                    note,
+                    NeedGuide,
+                    GuideObj,
+                    guideAssignedThisCycle,
+                    exception);
+                throw;
+            }
+#else
             orig_Initialize(note);
+#endif
 
 #if DEBUG
             // 池化复用时: 若本实例曾被选中, 清除选中 (避免复用实例仍标记为选中)
@@ -78,6 +128,16 @@ namespace Monitor
             fixedSoflanUnifiedSpeed = fixedNote.fixedSoflanUnifiedSpeed > 0f
                 ? fixedNote.fixedSoflanUnifiedSpeed
                 : FixedSoflan.DefaultUnifiedSpeed;
+
+#if DEBUG
+            GuideDiagnostics.OnNoteInitializeAfter(
+                this,
+                note,
+                NeedGuide,
+                GuideObj,
+                noteSoflanGroup,
+                isInSoflan);
+#endif
         }
 
         protected extern void orig_NoteCheck();
@@ -139,7 +199,23 @@ namespace Monitor
 
         protected void EndNote()
         {
+#if DEBUG
+            var endingNoteIndex = NoteIndex;
+            var endingGuide = GuideObj;
+            GuideDiagnostics.OnNoteEndBefore(this, endingNoteIndex, NeedGuide, endingGuide, NoteStat);
+            try
+            {
+                orig_EndNote();
+            }
+            catch (Exception exception)
+            {
+                GuideDiagnostics.OnNoteEndFailed(this, endingNoteIndex, NeedGuide, endingGuide, exception);
+                throw;
+            }
+            GuideDiagnostics.OnNoteEndAfter(this, endingNoteIndex, endingGuide);
+#else
             orig_EndNote();
+#endif
 
 #if DEBUG
             // 被选中的 note 结束时: 恢复原色 + 通知面板清选中与显示数据.

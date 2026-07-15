@@ -29,6 +29,8 @@ namespace SoflanSupport
         private float _fps;
         private float _fpsSmooth;
         private float _copyFeedbackTime;   // 复制按钮点击时刻, 用于显示"已复制"提示
+        private float _eachDumpFeedbackTime;
+        private int _lastEachDumpCount;
         private float _nextDataRefreshTime;
 
         private const float DataRefreshInterval = 0.2f;
@@ -214,6 +216,13 @@ namespace SoflanSupport
             GUILayout.Label($"PlayTime: {_msec:F1} ms  ({timeStr})");
             GUILayout.Label($"SoflanGroup0 Speed: {_speed0:F3}x" + (_hasData ? "" : " (no data)"));
             GUILayout.Label($"FPS: {_fps:F1}");
+            if (GUILayout.Button("Log active Each guides"))
+            {
+                _lastEachDumpCount = GuideDiagnostics.DumpVisibleEachGuides();
+                _eachDumpFeedbackTime = Time.realtimeSinceStartup;
+            }
+            if (_eachDumpFeedbackTime > 0f && Time.realtimeSinceStartup - _eachDumpFeedbackTime < 3f)
+                GUILayout.Label($"Each snapshot logged: {_lastEachDumpCount}");
             _showAllGroups = GUILayout.Toggle(_showAllGroups, "显示所有 group 倍率");
             if (_showAllGroups && _hasData)
             {

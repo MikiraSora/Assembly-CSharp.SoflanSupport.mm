@@ -8,6 +8,9 @@ using MAI2.Util;
 using Manager;
 using MonoMod;
 using SoflanSupport;
+#if DEBUG
+using System;
+#endif
 
 namespace Monitor.Game
 {
@@ -18,6 +21,9 @@ namespace Monitor.Game
         public void __SoflanClearCache()
         {
             Singleton<SoflanManager>.Instance.clearCurrentSoflanTimeCache();
+#if DEBUG
+            GuideDiagnostics.OnFrame();
+#endif
         }
 
         // UpdateCtrl: 原 msec 可见性检查前 — soflan 可见性判定
@@ -40,5 +46,34 @@ namespace Monitor.Game
                 return 2;
             return 1;
         }
+
+#if DEBUG
+        public extern bool orig_RegistNote(NoteData note);
+
+        public bool RegistNote(NoteData note)
+        {
+            GuideDiagnostics.OnRegisterBegin(this, note);
+            try
+            {
+                var result = orig_RegistNote(note);
+                GuideDiagnostics.OnRegisterEnd(note, result);
+                return result;
+            }
+            catch (Exception exception)
+            {
+                GuideDiagnostics.OnRegisterFailed(note, exception);
+                throw;
+            }
+        }
+
+        public extern void orig_ForceNoteCollect();
+
+        public void ForceNoteCollect()
+        {
+            GuideDiagnostics.OnForceCollectBefore(this);
+            orig_ForceNoteCollect();
+            GuideDiagnostics.OnForceCollectAfter(this);
+        }
+#endif
     }
 }
