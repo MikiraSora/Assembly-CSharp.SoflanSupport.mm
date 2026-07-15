@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core\SimpleSoflanFramework.Core.csproj">
+    <ProjectReference Include="..\Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core.NetFx472\SimpleSoflanFramework.Core.NetFx472.csproj">
       <Private>true</Private>
     </ProjectReference>
   </ItemGroup>

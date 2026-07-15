@@ -27,38 +27,9 @@ namespace MonoMod
             PatchLoadNote(module);
             PatchUpdateCtrl(module);
             PatchOnUpdate(module);
-            // 最后: 在 4 个目标方法起始注入 call DependencyAssemblyResolver.Register(),
-            // 保证在首次引用任何注入类型 (→ SimpleSoflanFramework.Core) 之前挂载运行时依赖解析器.
-            // 放最后, 使各方法的 InsertBefore(Instructions[0]) 把 Register() 置为新的首条指令
-            // (OnUpdate 此时首条已是 PatchOnUpdate 插入的 __SoflanUpdateGamePlayFumenController,
-            //  Register 会插到它之前, 故顺序为 Register(); __SoflanUpdateGamePlayFumenController(); ...).
-            InjectResolverRegister(module);
-        }
-
-        // ---------------- 5. 运行时依赖解析器 mount ----------------
-        private static void InjectResolverRegister(ModuleDefinition module)
-        {
-            var resolverType = module.GetType("SoflanSupport.DependencyAssemblyResolver");
-            if (resolverType == null)
-                throw new Exception("[SoflanRules] DependencyAssemblyResolver type not found in target module");
-            var register = resolverType.Methods.FirstOrDefault(m => m.Name == "Register")
-                           ?? throw new Exception("[SoflanRules] DependencyAssemblyResolver.Register not found");
-            var registerRef = module.ImportReference(register);
-
-            // 4 个目标方法均可能成为最早引用注入类型的入口 (OnUpdate=主循环每帧; loadMa2Main/loadNote=
-            // 谱面加载; UpdateCtrl=游戏更新). 全部 mount, Register() 幂等, 多次调用无害.
-            InjectAtStart(module, "Manager.NotesReader", "loadMa2Main", 3, registerRef);
-            InjectAtStart(module, "Manager.NotesReader", "loadNote", 4, registerRef);
-            InjectAtStart(module, "Monitor.Game.GameCtrl", "UpdateCtrl", 0, registerRef);
-            InjectAtStart(module, "Process.GameProcess", "OnUpdate", 0, registerRef);
-        }
-
-        private static void InjectAtStart(ModuleDefinition module, string typeFullName, string methodName, int paramCount, MethodReference registerRef)
-        {
-            var method = GetMethod(module, typeFullName, methodName, paramCount);
-            var il = method.Body.GetILProcessor();
-            var first = method.Body.Instructions[0];
-            il.InsertBefore(first, il.Create(OpCodes.Call, registerRef));
+            StripCompilerNullableMetadata(module);
+            // 注: SimpleSoflanFramework.Core 源码已通过 Shared Project 直接内置进 .mm.dll,
+            // 运行时无需再加载外部 Core.dll, 故原 DependencyAssemblyResolver.Register() 注入已移除.
         }
 
         // ---------------- helpers ----------------
@@ -87,6 +58,74 @@ namespace MonoMod
         {
             return (ins.OpCode == OpCodes.Call || ins.OpCode == OpCodes.Callvirt)
                    && ins.Operand is MethodReference mr && mr.Name == calleeName;
+        }
+
+        // C# record types emit NullableAttribute metadata even when nullable reference
+        // analysis is disabled. The old Mono.Cecil bundled with BepInEx 5.4 does not
+        // import those copied attribute constructors when it writes the patched module.
+        // They are compile-time nullability hints only, so remove them from every
+        // target member before MonoMod writes the final Assembly-CSharp module.
+        private static void StripCompilerNullableMetadata(ModuleDefinition module)
+        {
+            var removed = 0;
+            removed += StripNullableAttributes(module);
+            if (module.Assembly != null)
+                removed += StripNullableAttributes(module.Assembly);
+
+            foreach (var type in module.GetTypes())
+            {
+                removed += StripNullableAttributes(type);
+
+                foreach (var genericParameter in type.GenericParameters)
+                    removed += StripNullableAttributes(genericParameter);
+
+                foreach (var interfaceImplementation in type.Interfaces)
+                    removed += StripNullableAttributes(interfaceImplementation);
+
+                foreach (var field in type.Fields)
+                    removed += StripNullableAttributes(field);
+
+                foreach (var property in type.Properties)
+                    removed += StripNullableAttributes(property);
+
+                foreach (var eventDefinition in type.Events)
+                    removed += StripNullableAttributes(eventDefinition);
+
+                foreach (var method in type.Methods)
+                {
+                    removed += StripNullableAttributes(method);
+                    removed += StripNullableAttributes(method.MethodReturnType);
+
+                    foreach (var genericParameter in method.GenericParameters)
+                        removed += StripNullableAttributes(genericParameter);
+
+                    foreach (var parameter in method.Parameters)
+                        removed += StripNullableAttributes(parameter);
+                }
+            }
+
+            if (removed > 0)
+                System.Console.WriteLine($"[SoflanRules] stripped {removed} compiler nullable attributes");
+        }
+
+        private static int StripNullableAttributes(ICustomAttributeProvider provider)
+        {
+            if (provider == null || !provider.HasCustomAttributes)
+                return 0;
+
+            var removed = 0;
+            for (var i = provider.CustomAttributes.Count - 1; i >= 0; i--)
+            {
+                var fullName = provider.CustomAttributes[i].AttributeType.FullName;
+                if (fullName != "System.Runtime.CompilerServices.NullableAttribute"
+                    && fullName != "System.Runtime.CompilerServices.NullableContextAttribute")
+                    continue;
+
+                provider.CustomAttributes.RemoveAt(i);
+                removed++;
+            }
+
+            return removed;
         }
 
         private static bool TryGetLdlocVariable(Mono.Cecil.Cil.MethodBody body, Instruction ins, out VariableDefinition variable)

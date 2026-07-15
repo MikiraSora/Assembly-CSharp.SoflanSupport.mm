@@ -10,6 +10,8 @@
     <!-- 输出整洁: 仅产出 patch .mm.dll 自身, 不拷贝目标/Unity/System/MonoMod 等传递依赖 -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <NoWarn>$(NoWarn);CS0626;CS0108;CS0114;CS0414;CS0169</NoWarn>
+    <!-- 与 NetFx472 项目一致: net472 已内置 System.Linq.Append, 关闭 Core 里的自定义 Append 以免二义性 -->
+    <DefineConstants>$(DefineConstants);HAS_SYSTEM_LINQ_APPEND</DefineConstants>
   </PropertyGroup>
 
   <!-- 子项目 (各有独立 .csproj, 不属于本 patch) 与参考代码不参与编译: 避免 SDK 递归纳入导致
@@ -40,10 +42,9 @@
       <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- 外部依赖: 提供 OngekiFumenEditor.Core.* 命名空间. 运行时需随 .mm.dll 部署 -->
-    <ProjectReference Include="Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core\SimpleSoflanFramework.Core.csproj">
-      <Private>false</Private>
-    </ProjectReference>
+    <!-- 外部依赖: 提供 SimpleSoflanFramework.Core / OngekiFumenEditor.Core.* 命名空间.
+         改用 Shared Project (projitems) 直接把源码编进 .mm.dll, 无需单独部署 Core.dll. -->
+    <!-- (Shared Project 的 Import 见文件末尾) -->
     <!-- Unity 运行时类型 -->
     <Reference Include="UnityEngine">
       <HintPath>F:\SDEZ_165\Package\Sinmai_Data\Managed\UnityEngine.dll</HintPath>
@@ -92,4 +93,9 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <!-- SimpleSoflanFramework.Core 以 Shared Project 形式引入: projitems 内用显式
+       $(MSBuildThisFileDirectory)*.cs 路径 Include, 放在顶部 Compile Remove="Dependencies\**"
+       之后, 故这些源码会被重新纳入编译并直接内置进 .mm.dll. -->
+  <Import Project="Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core\SimpleSoflanFramework.Core.projitems" Label="Shared" />
 </Project>
