@@ -337,6 +337,7 @@ namespace Monitor
             {
                 if (NoteGuideTrans != null)
                 {
+                    NoteGuideTrans.localScale = new Vector3(0f, 0f, 1f);
                     GuideObj.SetAlpha(0);
                 }
             }
