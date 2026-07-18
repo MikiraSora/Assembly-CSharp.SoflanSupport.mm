@@ -17,7 +17,9 @@ namespace MonoMod
     {
         static MonoModRules()
         {
-            MonoModRulesManager.Modder.PostProcessors += PostProcess;
+            var modder = MonoModRulesManager.Modder;
+            RenameEmbeddedAnonymousTypes(modder);
+            modder.PostProcessors += PostProcess;
         }
 
         private static void PostProcess(MonoModder modder)
@@ -34,6 +36,36 @@ namespace MonoMod
 
         // ---------------- helpers ----------------
 
+        // C# 匿名类型位于模块顶层，名称通常从 <>f__AnonymousType0 开始。
+        // 多个 .mm.dll 各自编译匿名类型时会得到相同名称；MonoMod 会把它们误判为同一目标类型并合并，
+        // 若属性结构不同便留下重复构造函数/方法签名。Rules 静态构造发生在 PrePatch 之前，
+        // 因此在这里给 Soflan patch 模块内的匿名类型加唯一前缀，模块内 TypeRef 会随 TypeDefinition
+        // 一同使用新名称，且无需修改内嵌 SimpleSoflanFramework 子模块源码。
+        private static void RenameEmbeddedAnonymousTypes(MonoModder modder)
+        {
+            const string patchModuleName = "Assembly-CSharp.SoflanSupport.mm.dll";
+            const string anonymousPrefix = "<>f__AnonymousType";
+            const string uniquePrefix = "<>f__SoflanSupportAnonymousType";
+
+            if (modder == null)
+                throw new Exception("[SoflanRules] MonoModder is unavailable while renaming anonymous types");
+
+            var patchModule = modder.Mods
+                .OfType<ModuleDefinition>()
+                .FirstOrDefault(m => m.Name == patchModuleName);
+            if (patchModule == null)
+                throw new Exception($"[SoflanRules] patch module not found: {patchModuleName}");
+
+            foreach (var type in patchModule.Types
+                         .Where(t => t.Name.StartsWith(anonymousPrefix, StringComparison.Ordinal))
+                         .ToArray())
+            {
+                var oldName = type.Name;
+                type.Name = uniquePrefix + oldName.Substring(anonymousPrefix.Length);
+                System.Console.WriteLine($"[SoflanRules] renamed compiler type {oldName} -> {type.Name}");
+            }
+        }
+
         private static MethodDefinition GetMethod(ModuleDefinition module, string typeFullName, string methodName, int paramCount)
         {
             var type = module.GetType(typeFullName);
@@ -44,6 +76,54 @@ namespace MonoMod
             if (method == null || method.Body == null)
                 throw new Exception($"[SoflanRules] method not found: {typeFullName}::{methodName}");
             return method;
+        }
+
+        // MonoMod PR #208 会在多个 .mm.dll 包装同一方法时保留 orig_/patched_ 调用链。
+        // PostProcessor 运行于所有 patch_ 方法复制完成之后，因此最外层同名方法可能只剩包装逻辑，
+        // 原版 IL 则位于 orig_method 或 patched_method[_n]。按方法名会选错目标，必须再以原始 IL
+        // 的稳定特征筛选唯一方法体，才能与 Mine 等其他补丁共存。
+        private static MethodDefinition GetPatchChainMethodByBody(
+            ModuleDefinition module,
+            string typeFullName,
+            string methodName,
+            int paramCount,
+            Func<MethodDefinition, bool> bodyPredicate,
+            string expectedBodyDescription)
+        {
+            var type = module.GetType(typeFullName);
+            if (type == null)
+                throw new Exception($"[SoflanRules] type not found: {typeFullName}");
+
+            var origName = "orig_" + methodName;
+            var patchedName = "patched_" + methodName;
+            var candidates = type.Methods
+                .Where(m => m.Parameters.Count == paramCount
+                            && m.Body != null
+                            && (m.Name == methodName
+                                || m.Name == origName
+                                || m.Name == patchedName
+                                || m.Name.StartsWith(patchedName + "_", StringComparison.Ordinal)))
+                .ToArray();
+            var matches = candidates.Where(bodyPredicate).ToArray();
+            if (matches.Length != 1)
+            {
+                var candidateNames = candidates.Length == 0
+                    ? "<none>"
+                    : string.Join(", ", candidates.Select(m => m.Name));
+                var matchedNames = matches.Length == 0
+                    ? "<none>"
+                    : string.Join(", ", matches.Select(m => m.Name));
+                throw new Exception(
+                    $"[SoflanRules] expected exactly one {typeFullName}::{methodName}/{paramCount} " +
+                    $"patch-chain body with {expectedBodyDescription}; candidates=[{candidateNames}], " +
+                    $"matches=[{matchedNames}]");
+            }
+
+            var selected = matches[0];
+            if (selected.Name != methodName)
+                System.Console.WriteLine(
+                    $"[SoflanRules] {typeFullName}::{methodName} original IL selected from {selected.Name}");
+            return selected;
         }
 
         private static MethodDefinition GetOwnMethod(TypeDefinition type, string name)
@@ -156,7 +236,14 @@ namespace MonoMod
         {
             const string typeName = "Manager.NotesReader";
             var type = module.GetType(typeName);
-            var method = GetMethod(module, typeName, "loadMa2Main", 3);
+            var method = GetPatchChainMethodByBody(
+                module,
+                typeName,
+                "loadMa2Main",
+                3,
+                m => m.Body.Instructions.Any(i => IsCallTo(i, "calcBPMList"))
+                     && m.Body.Instructions.Any(i => IsCallTo(i, "calcTotal")),
+                "calls to calcBPMList and calcTotal");
             var body = method.Body;
             var il = body.GetILProcessor();
 
@@ -182,7 +269,13 @@ namespace MonoMod
         {
             const string typeName = "Manager.NotesReader";
             var type = module.GetType(typeName);
-            var method = GetMethod(module, typeName, "loadNote", 4);
+            var method = GetPatchChainMethodByBody(
+                module,
+                typeName,
+                "loadNote",
+                4,
+                m => m.Body.Variables.Any(v => v.VariableType.FullName == "Manager.NoteData"),
+                "a Manager.NoteData local");
             var body = method.Body;
             var il = body.GetILProcessor();
             var loadNoteHelper = GetOwnMethod(type, "__SoflanLoadNote");
