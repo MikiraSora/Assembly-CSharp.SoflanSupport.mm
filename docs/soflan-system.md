@@ -71,7 +71,7 @@ new Soflan
 
 ### Note group marker
 
-note record 中可以加入以 `#` 开头的 marker，把该物件挂到 Soflan group。
+note record 中可以加入 `#groupFspeed` marker，把该物件挂到 Soflan group。marker 可位于混合扩展字段中的任意位置，读取器使用正则提取连续的 Soflan token，不要求整个字段以 `#` 开头。
 
 支持语法：
 
@@ -79,15 +79,19 @@ note record 中可以加入以 `#` 开头的 marker，把该物件挂到 Soflan 
 #0
 #1
 #219
+!m#1
+#1!m!y
+!y!m#1
 ```
 
 含义：
 
 - `#1` 表示该 note 使用 Soflan group `1`。
 - 未写 marker 的 note 使用 group `0`。
-- 同一个 note record 只能有一个以 `#` 开头的 Soflan marker。
+- 同一个 note record 只能匹配到一个 Soflan marker。
+- `!m`、`!y` 等以 `!` 开头的私有修饰可出现在 Soflan token 前后，不会成为 group 或 fixed speed 的一部分。
 
-当前 marker 是本 patch 的扩展语法。它由 `SoflanManager.loadNote()` 扫描 `record._str` 得到，不是原版游戏公开 API。
+当前 marker 是本 patch 的扩展语法。它由共享 `SoflanMarkerParser` 对 `record._str` 执行 `Regex.Matches()` 得到，运行时、`SoflanCalculator` 和 `MajdataValidation` 使用同一解析器；这不是原版游戏公开 API。
 
 ### FixedSoflan marker
 
@@ -147,7 +151,7 @@ MA2 加载阶段通过 `MonoModRules` 对 `NotesReader` 做 IL 插入。
 4. `SoflanManager.loadComposition()` 重新读取 MA2 文件，扫描所有 `SFL` 行，写入 `SoflanListMap`。
 5. `loadComposition()` 同时从 `sr.GetCompositioin()._bpmList` 建立 `BpmList`。
 6. `NotesReader.loadNote()` 返回前执行 `__SoflanLoadNote(noteData, rec, sr)`。
-7. `SoflanManager.loadNote()` 扫描该 note record 的 `#...` marker，登记 `noteIndex -> soflanGroup`。
+7. `SoflanManager.loadNote()` 使用共享正则从该 note record 的混合修饰字段中提取 `#groupFspeed`，登记 `noteIndex -> soflanGroup`。
 8. 若 marker 带 `F`，同时写入 `NoteData.isFixedSoflanToUnifiedSpeed` 和 `fixedSoflanUnifiedSpeed`。
 
 如果谱面没有任何 `SFL` 行，`containSoflans` 保持 false。播放时各 note patch 会回退到原版逻辑。
@@ -470,6 +474,8 @@ note marker 解析更严格：
 
 - 多个 `#...` marker 会写日志并抛 `FormatException`。
 - 空 marker、内部空白、非法 group、非法 FixedSoflan speed 都会写日志并抛 `FormatException`。
+- `#1!m!y`、`!y!m#1`、`!m#1F600!y` 等排列会先由正则抽出连续的 `#1` 或 `#1F600`，其他私有修饰保持独立。
+- marker 与 SFL 格式错误使用 Release 无条件 `PatchLog.Error`，后台写入 UTF-8 without BOM 的 `dpSoflanSupport.log` 并尝试转发 Unity Error；普通 INFO 日志仍只在 Debug 且受配置开关控制。
 
 ### 缺失 group
 
@@ -504,6 +510,7 @@ DEBUG 构建会挂载 Soflan Monitor 面板。
 - `speed = 0` 停车：物件应停在视觉时间轴对应位置，可见性不应丢 note。
 - 负速回拉：物件可被可见性判断重新注册到屏幕范围。
 - 多 group：不同 note 的 `#N` marker 应只影响各自 group。
+- 混合修饰：`#1!m!y` 与 `!y!m#1` 都应登记为 group `1`。
 - TouchNoteB / TouchNoteC：应保留原版固定触摸区动画，而不是变成普通 Tap Y 轴移动。
 - Hold / BreakHold：头尾和 body 长度应跟随 Soflan 时间轴。
 - FixedSoflan 弹跳 Tap：不同玩家物件速度下，弹跳开始时机和判定线对齐应保持一致。
@@ -513,12 +520,15 @@ DEBUG 构建会挂载 Soflan Monitor 面板。
 ```powershell
 dotnet build -c Release Assembly-CSharp.SoflanSupport.mm.csproj
 dotnet build -c Debug Assembly-CSharp.SoflanSupport.mm.csproj
+dotnet run --project tools/SoflanMarkerTests/SoflanMarkerTests.csproj -c Release
+dotnet run --project tools/SoflanLogTests/SoflanLogTests.csproj -c Release
 ```
 
 静态 patch 验证建议：
 
 - `NotesReader.loadMa2Main` 包含 clear/load composition 插入。
 - `NotesReader.loadNote` 包含 load note marker 插入。
+- `SoflanMarkerParser.TryParse` 调用 `Regex.Matches`，并被 `SoflanManager.loadNote` 与 `SoflanCalculator` 共用。
 - `GameCtrl.UpdateCtrl` 包含 Soflan 可见性派发。
 - `NoteBase.GetNoteYPosition` 存在 Soflan 分支。
 - `HoldNote.Execute` / `BreakHoldNote.Execute` 存在 Soflan visual 分支。

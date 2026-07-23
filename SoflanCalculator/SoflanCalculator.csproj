@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\SoflanSupport\SoflanMarkerParser.mm.cs" Link="SoflanMarkerParser.mm.cs" />
     <ProjectReference Include="..\Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core.NetFx472\SimpleSoflanFramework.Core.NetFx472.csproj">
       <Private>true</Private>
     </ProjectReference>

@@ -13,6 +13,7 @@ namespace SoflanSupport
     {
         public const string FilePath = "dpSoflanSupport.log";
         private const int MaxBatchSize = 128;
+        private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
         private static readonly ConcurrentQueue<LogEntry> queue = new ConcurrentQueue<LogEntry>();
         private static readonly AutoResetEvent queueSignal = new AutoResetEvent(false);
         private static readonly Thread workerThread;
@@ -32,7 +33,17 @@ namespace SoflanSupport
         {
             if (!Setting.EnablePatchLog)
                 return;
-            queue.Enqueue(new LogEntry(Thread.CurrentThread.ManagedThreadId, msg ?? string.Empty));
+            Enqueue("INFO", msg);
+        }
+
+        public static void Error(string msg)
+        {
+            Enqueue("ERROR", msg);
+        }
+
+        private static void Enqueue(string level, string msg)
+        {
+            queue.Enqueue(new LogEntry(Thread.CurrentThread.ManagedThreadId, level, msg ?? string.Empty));
             queueSignal.Set();
         }
 
@@ -79,16 +90,25 @@ namespace SoflanSupport
                     text.Append("[Thread: ");
                     text.Append(entry.ThreadId);
                     text.Append("]");
+                    text.Append("[");
+                    text.Append(entry.Level);
+                    text.Append("]");
                     text.Append(entry.Message);
                     text.Append(Environment.NewLine);
                 }
-                File.AppendAllText(FilePath, text.ToString());
+                File.AppendAllText(FilePath, text.ToString(), Utf8NoBom);
             }
             catch { }
 
             for (var i = 0; i < batch.Count; i++)
             {
-                try { UnityEngine.Debug.Log(batch[i].Message); }
+                try
+                {
+                    if (batch[i].Level == "ERROR")
+                        UnityEngine.Debug.LogError(batch[i].Message);
+                    else
+                        UnityEngine.Debug.Log(batch[i].Message);
+                }
                 catch { }
             }
 
@@ -98,11 +118,13 @@ namespace SoflanSupport
         private struct LogEntry
         {
             public readonly int ThreadId;
+            public readonly string Level;
             public readonly string Message;
 
-            public LogEntry(int threadId, string message)
+            public LogEntry(int threadId, string level, string message)
             {
                 ThreadId = threadId;
+                Level = level;
                 Message = message;
             }
         }

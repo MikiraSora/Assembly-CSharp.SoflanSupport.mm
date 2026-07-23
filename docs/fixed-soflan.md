@@ -12,7 +12,7 @@ FixedSoflan 只影响 Soflan 视觉显示逻辑，不改变判定时间。`NoteC
 
 ## 语法
 
-Soflan 组声明仍使用 note record 中以 `#` 开头的 marker。FixedSoflan 在原有组号后追加 `F` 或 `f`。
+Soflan 组声明仍使用 `#groupFspeed` marker。FixedSoflan 在原有组号后追加 `F` 或 `f`；共享正则可从混合修饰字段任意位置提取该连续 token，因此字段整体不必以 `#` 开头。
 
 | Marker | 含义 |
 | --- | --- |
@@ -40,15 +40,17 @@ Soflan 组声明仍使用 note record 中以 `#` 开头的 marker。FixedSoflan 
 #219F
 #219F600
 #219F750.5
+!m#219F600!y
+#219F600!y!m
 ```
 
 对于弹跳 Soflan 命令，实际使用时需要让参与弹跳显示的 Tap 系物件挂到对应 group，并在 marker 上加 `F`，例如 `#219F` 或 `#219F600`。否则物件仍会按玩家当前物件速度计算显示窗口和移动进度。
 
 ## 语法错误策略
 
-解析发生在 `SoflanManager.loadNote()`。每个 note 加载时会先重置 FixedSoflan 字段，再扫描该 note record 中以 `#` 开头的 marker。
+解析发生在 `SoflanManager.loadNote()`。每个 note 加载时会先重置 FixedSoflan 字段，再由共享 `SoflanMarkerParser` 使用正则从所有 record 字段中提取连续的 `#groupFspeed` token；`!m`、`!y` 等私有修饰可位于其前后。
 
-以下情况会写入 `PatchLog` 并抛出 `FormatException`：
+以下情况会通过 Release 无条件 `PatchLog.Error` 写入 `dpSoflanSupport.log`，并抛出 `FormatException`：
 
 - 同一个 note record 中出现多个 Soflan marker。
 - marker 为空，例如 `#`。

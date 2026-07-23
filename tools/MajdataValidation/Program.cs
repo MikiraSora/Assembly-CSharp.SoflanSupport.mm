@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using MajSimai;
+using SoflanSupport;
 
 var ma2Path = args.Length > 0
     ? args[0]
@@ -110,10 +111,14 @@ static Ma2Data ReadMa2(string path)
                 var grid = ToTotalGrid(parts[1], parts[2], resolution);
                 var pos = int.Parse(parts[3], CultureInfo.InvariantCulture) + 1;
                 var group = 0;
-                if (parts.Length >= 5 && parts[4].StartsWith("#", StringComparison.Ordinal))
+                SoflanMarkerParseResult marker;
+                string markerReason;
+                if (!SoflanMarkerParser.TryParse(parts, out marker, out markerReason))
                 {
-                    group = int.Parse(parts[4][1..], CultureInfo.InvariantCulture);
+                    throw new InvalidDataException($"Invalid Soflan marker at MA2 line: {line}; reason={markerReason}");
                 }
+                if (marker.HasMarker)
+                    group = marker.Group;
                 notes.Add($"{grid}|{group}|{pos}");
                 break;
             }

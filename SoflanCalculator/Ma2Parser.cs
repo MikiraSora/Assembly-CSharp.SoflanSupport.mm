@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SoflanSupport;
 
 namespace SoflanCalculator
 {
@@ -202,22 +203,16 @@ namespace SoflanCalculator
         }
 
         /// <summary>
-        /// 从 note 记录字段末尾提取 #N soflan 组号.
-        /// 逻辑与 SoflanManager.loadNote 一致: Reverse 遍历找第一个 "#" 开头的字段.
+        /// 从 note 记录的混合修饰字段中提取 #groupFspeed soflan 组号.
+        /// 逻辑与 SoflanManager.loadNote 一致: 使用共享正则匹配完整 Soflan token.
         /// </summary>
         private static int ExtractSoflanGroup(string[] fields)
         {
-            for (int i = fields.Length - 1; i >= 0; i--)
-            {
-                if (fields[i] != null && fields[i].StartsWith("#"))
-                {
-                    if (int.TryParse(fields[i].TrimStart('#').Trim(), out var group))
-                        return group;
-                    // 解析失败则停止查找 (与游戏一致)
-                    return 0;
-                }
-            }
-            return 0;
+            SoflanMarkerParseResult marker;
+            string reason;
+            if (!SoflanMarkerParser.TryParse(fields, out marker, out reason))
+                return 0;
+            return marker.HasMarker ? marker.Group : 0;
         }
 
         private static int ParseInt(string[] fields, int index, int defaultVal)
