@@ -32,10 +32,16 @@ namespace Monitor.Game
 
             var currentMsec = NotesManager.GetCurrentMsec();
             var noteSoflanGroup = soflanManager.getNoteSoflanGroup(note);
-            var soflanTime = soflanManager.GetCurrentSoflanTimeCached(currentMsec, noteSoflanGroup);
             var visibleMsec = FixedSoflan.IsEnabledForNote(note)
                 ? FixedSoflan.GetVisibleMsec(FixedSoflan.GetUnifiedSpeed(note))
                 : num;
+            var maiBugAdjustMsec = SoflanVisualTiming.GetMaiBugAdjustMsec(
+                note.type.getEnum(),
+                visibleMsec);
+            var soflanTime = soflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+                currentMsec,
+                maiBugAdjustMsec,
+                noteSoflanGroup);
             if (!soflanManager.checkNoteVisible(note, currentMsec, visibleMsec, noteSoflanGroup, soflanTime))
                 return 2;
             return 1;

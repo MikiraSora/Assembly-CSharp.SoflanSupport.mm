@@ -263,6 +263,7 @@ namespace SoflanCalculator
             Console.WriteLine($"NoteSpeedValue:   {r.NoteSpeedValue:F1}  (Speed {SpeedLabel(r.NoteSpeedValue)})");
             Console.WriteLine($"speedRatio:       {r.SpeedRatio:F3}");
             Console.WriteLine($"DefaultMsec:      {r.DefaultMsec:F3}");
+            Console.WriteLine($"MaiBugEnabled:    {r.MaiBugAdjustEnabled}");
             Console.WriteLine($"MaiBugAdjustMSec: {r.MaiBugAdjustMSec:F3}");
             Console.WriteLine($"StartPos:         {r.StartPos:F3}");
             Console.WriteLine($"EndPos:            {r.EndPos:F3}");
@@ -272,7 +273,9 @@ namespace SoflanCalculator
             Console.WriteLine($"AppearMsec:        {r.AppearMsec:F3}");
             Console.WriteLine($"noteSoflanTime:    {r.NoteSoflanTime:F3}");
             Console.WriteLine($"currentMsec:       {r.CurrentMsec:F3}");
-            Console.WriteLine($"currentSoflanTime: {r.CurrentSoflanTime:F3}");
+            Console.WriteLine($"maiBugCurrentMsec: {r.MaiBugAdjustedCurrentMsec:F3}");
+            Console.WriteLine($"rawSoflanTime:     {r.RawCurrentSoflanTime:F3}");
+            Console.WriteLine($"currentSoflanTime: {r.CurrentSoflanTime:F3} (MaiBug adjusted)");
             Console.WriteLine($"currentSoflanSpeed: {r.CurrentSoflanSpeed:F3}x  (group {r.SoflanGroup})");
             Console.WriteLine();
 

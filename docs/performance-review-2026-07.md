@@ -361,11 +361,12 @@ Release 产物 IL 已确认：
 
 ## 低优先级与待实机采样项
 
-### Tap 热路径中的确定死计算
+### Tap 热路径中的确定死计算（已修复）
 
-`Monitor.NoteBase.mm.cs:202` 读取的 `currentTime` 没有被使用；`Monitor.NoteBase.mm.cs:219` 开始计算的玩家速度、`offsetYAdj` 最终又乘以恒为 `0` 的 `sign`。Release IL 中这些 getter 和算术仍然存在，每个活跃 Tap/Break/Star 每帧都会执行。
-
-如果当前设计明确保持 `sign = 0`，可以删除整条死计算，视觉结果不变。若注释表示未来准备恢复 offset，则应把计算一起放回真正启用该功能的分支，而不是常驻热路径。
+原评审发现 `currentTime` 未使用，且玩家速度、`offsetYAdj` 最终乘以恒为 `0` 的
+`sign`。MaiBug-Soflan 对齐改动现已删除这条死计算：音频毫秒偏移通过
+`GetCurrentSoflanTimeWithAudioOffsetCached()` 映射进 Soflan 时间轴，`currentTime`
+用于构造偏移后的音频时间，不再另外计算或叠加 `offsetYAdj`。
 
 ### 原版 scale 写入后被 Soflan scale 覆盖
 

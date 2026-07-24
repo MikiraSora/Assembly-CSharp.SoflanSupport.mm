@@ -27,6 +27,22 @@
 - 提供 DEBUG 调试面板，显示当前 group 速度、选中 Tap 的 Soflan 计算数据。
 - 支持 FixedSoflan 扩展，使指定 Tap 系物件按固定视觉速度计算进度，避免玩家物件速度影响弹跳表现。
 
+## mai2.ini 开关
+
+`GetMaiBugAdjustMSec()` 是否参与 Soflan 视觉时间轴由游戏目录下的 `mai2.ini` 控制：
+
+```ini
+[Patches]
+EnableSoflanMaiBugAdjust=1
+```
+
+- 配置缺失时默认启用。
+- `1` 表示启用，`0` 表示关闭；游戏的 `IniFile` 按整数读取该布尔项。
+- 配置在游戏启动后首次使用 Soflan 视觉时读取一次；修改后需要重启游戏。
+- 启用时，Tap / Break / Star / Hold / BreakHold 的 MaiBug 音频毫秒偏移会经过 Soflan 积分。
+- 关闭时，上述物件和 `GameCtrl` 可见性注册统一使用 `0ms` 偏移；Touch 原本就不使用该偏移，因此不受开关影响。
+- 该开关只改变 Soflan 视觉显示，不改变音频时间、判定时间或原版无 SFL 谱面的逻辑。
+
 ## MA2 命令支持
 
 ### SFL 行
@@ -168,7 +184,8 @@ MA2 加载阶段通过 `MonoModRules` 对 `NotesReader` 做 IL 插入。
 SoflanManager.clearCurrentSoflanTimeCache()
 ```
 
-这会让同一帧里不同 note 共享 `group -> currentSoflanTime` 缓存，同时避免跨帧复用旧时间。
+这会让同一帧里不同 note 共享
+`(group, maiBugAdjustMsec) -> currentSoflanTime` 缓存，同时避免跨帧复用旧时间。
 
 ### 可见性派发
 
@@ -191,12 +208,18 @@ Soflan 可见性判断使用：
 ```csharp
 currentMsec = NotesManager.GetCurrentMsec()
 group = getNoteSoflanGroup(note)
-currentSoflanTime = GetCurrentSoflanTimeCached(currentMsec, group)
 visibleMsec = FixedSoflan.IsEnabledForNote(note) ? FixedSoflanVisibleMsec : num
+maiBugAdjustMsec = SoflanVisualTiming.GetMaiBugAdjustMsec(note.type, visibleMsec)
+currentSoflanTime = GetCurrentSoflanTimeWithAudioOffsetCached(
+    currentMsec,
+    maiBugAdjustMsec,
+    group)
 checkNoteVisible(note, currentMsec, visibleMsec, group, currentSoflanTime)
 ```
 
 `num` 是原版按玩家物件速度得到的可见时间窗。FixedSoflan 物件会改用固定速度时间窗。
+Tap/Star/Break/Hold 系物件还会把原版 `GetMaiBugAdjustMSec()` 的音频毫秒偏移先加到
+`currentMsec`，再映射进 Soflan 时间轴；Touch 保持原始 Soflan 当前时间。
 
 ## 时间轴原理
 
@@ -205,7 +228,8 @@ checkNoteVisible(note, currentMsec, visibleMsec, group, currentSoflanTime)
 Soflan 谱面里，本系统先把音频时间映射到 Soflan Y：
 
 ```csharp
-currentSoflanTime = ConvertAudioTimeToY_PreviewMode(currentAudioMsec, group)
+adjustedCurrentAudioMsec = currentAudioMsec + maiBugAdjustMsec
+currentSoflanTime = ConvertAudioTimeToY_PreviewMode(adjustedCurrentAudioMsec, group)
 noteSoflanTime = ConvertAudioTimeToY_PreviewMode(noteAudioMsec, group)
 diffTime = noteSoflanTime - currentSoflanTime
 ```
@@ -288,7 +312,9 @@ note.time.msec 是否落在任意 visible range 内
 - 每帧或 `visibleMsec` 改变时递增 `visibleRangeCacheVersion`。
 - 只有某一帧实际检查到某个 group 时，才重建该 group 的可见范围。
 - 同一帧同一 group 后续 note 复用 `VisibleMsecRangeCache.Ranges`。
-- 同一帧同一 group 的 `currentSoflanTime` 也通过 `GetCurrentSoflanTimeCached()` 复用。
+- 同一帧相同 `(group, maiBugAdjustMsec)` 的 `currentSoflanTime` 通过
+  `GetCurrentSoflanTimeWithAudioOffsetCached()` 复用；零偏移调用仍由
+  `GetCurrentSoflanTimeCached()` 转发到同一缓存。
 
 ## Tap / Break / Star 视觉算法
 
@@ -297,13 +323,28 @@ Tap 系物件通过 `NoteBase.GetNoteYPosition_soflan()` 重算 Y。
 基础变量：
 
 ```csharp
+maiBugAdjustMsec = EnableSoflanMaiBugAdjust
+    ? MaiBugAdjust.Calculate(noteSpeed)
+    : 0
+adjustedCurrentAudioMsec = currentAudioMsec + maiBugAdjustMsec
+currentSoflanTime = ConvertAudioTimeToY_PreviewMode(adjustedCurrentAudioMsec, group)
 diffTime = noteSoflanTime - currentSoflanTime
 absDiffTime = Abs(diffTime)
-moveStartTime = DefaultMsec - GetMaiBugAdjustMSec()
-scaleStartTime = 2 * DefaultMsec - GetMaiBugAdjustMSec()
+moveStartTime = DefaultMsec
+scaleStartTime = 2 * DefaultMsec
 insideY = StartPos
 outsideY = EndPos + (EndPos - StartPos)
 ```
+
+`GetMaiBugAdjustMSec()` 返回的是音频毫秒，不能直接与 Soflan Y 距离相减。把
+`currentAudioMsec + adjustMsec` 整体交给 Soflan 转换后，1x 时可还原原版时序，
+加速、减速、停车、反向和跨 SFL 边界时则由积分结果自动决定视觉偏移。
+若偏移后的音频时间小于 `0`，会钳到谱面起点，避免 `TGridCalculator` 在首帧得到
+无效的负时间 TGrid。
+
+当 `EnableSoflanMaiBugAdjust=0` 时，`adjustMsec` 为 `0`，所以
+`adjustedCurrentAudioMsec == currentAudioMsec`，移动和缩放门槛仍保持纯
+`DefaultMsec / 2*DefaultMsec`。
 
 普通 Soflan Y：
 
@@ -331,7 +372,7 @@ guide 状态：
 本体缩放在 `NoteCheck()` 后重算：
 
 ```csharp
-scale = Clamp01((2 * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec)
+scale = Clamp01((2 * DefaultMsec - absDiffTime) / DefaultMsec)
 scale *= UserOption.NoteSize
 ```
 
@@ -346,6 +387,9 @@ Hold 和 BreakHold 使用头尾两个 Soflan 时间：
 ```csharp
 headSoflanTime = ConvertAudioTimeToY_PreviewMode(AppearMsec, group)
 tailSoflanTime = ConvertAudioTimeToY_PreviewMode(TailMsec, group)
+currentSoflanTime = ConvertAudioTimeToY_PreviewMode(
+    currentAudioMsec + maiBugAdjustMsec,
+    group)
 headDiffTime = headSoflanTime - currentSoflanTime
 tailDiffTime = tailSoflanTime - currentSoflanTime
 ```
@@ -420,8 +464,9 @@ FixedSoflan 是 Tap 系 Soflan 的补充模式。普通 Soflan 的移动时间�
 ```csharp
 DefaultMsec = 240000 / 600 = 400ms
 MaiBugAdjustMSec = -10ms
-MoveStartTime = 410ms
-ScaleStartTime = 810ms
+AdjustedCurrentAudioMsec = CurrentAudioMsec - 10ms
+MoveStartTime = 400 Soflan-Y ms
+ScaleStartTime = 800 Soflan-Y ms
 VisibleMsec = 800ms
 ```
 
@@ -502,6 +547,8 @@ DEBUG 构建会挂载 Soflan Monitor 面板。
 - 可选显示前 50 个 group 的当前速度。
 - 右键选中 Tap，显示 diffTime、scaleStartTime、moveStartTime、moveProgress、finalScale、Y 等数据。
 - FixedSoflan Tap 会额外显示 fixed speed、fixed motion progress 和 fixed scale progress。
+- 选中 Tap 会显示 MaiBug 音频偏移、偏移后的音频时间、原始/偏移后 Soflan 时间。
+- 面板顶部及选中 Tap 数据会显示 `MaiBugAdjust: Enabled/Disabled`，用于确认 `mai2.ini` 开关是否生效。
 
 建议验证：
 
@@ -514,6 +561,8 @@ DEBUG 构建会挂载 Soflan Monitor 面板。
 - TouchNoteB / TouchNoteC：应保留原版固定触摸区动画，而不是变成普通 Tap Y 轴移动。
 - Hold / BreakHold：头尾和 body 长度应跟随 Soflan 时间轴。
 - FixedSoflan 弹跳 Tap：不同玩家物件速度下，弹跳开始时机和判定线对齐应保持一致。
+- `EnableSoflanMaiBugAdjust=0`：600 速度、1x SFL 的判定时 `diffTime` 应为 `0`，物件 Y 应回到 `EndPos`。
+- `EnableSoflanMaiBugAdjust=1` 或缺失：600 速度、1x SFL 的判定时应保留约 `7px` 的原版 MaiBug 位置滞后。
 
 构建验证：
 
@@ -522,6 +571,7 @@ dotnet build -c Release Assembly-CSharp.SoflanSupport.mm.csproj
 dotnet build -c Debug Assembly-CSharp.SoflanSupport.mm.csproj
 dotnet run --project tools/SoflanMarkerTests/SoflanMarkerTests.csproj -c Release
 dotnet run --project tools/SoflanLogTests/SoflanLogTests.csproj -c Release
+dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release
 ```
 
 静态 patch 验证建议：

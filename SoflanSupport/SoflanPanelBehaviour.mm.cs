@@ -48,6 +48,9 @@ namespace SoflanSupport
             public float InsideY, OutsideY, SoflanY, ClipedSoflanY;
             public bool IsFixedSoflanToUnifiedSpeed;
             public float FixedSoflanUnifiedSpeed, FixedMotionProgress, FixedScaleProgress;
+            public bool MaiBugAdjustEnabled;
+            public float MaiBugAdjustMsec, MaiBugAdjustedAudioMsec;
+            public float RawCurrentSoflanTime, AdjustedCurrentSoflanTime;
             public NoteBase.NoteStatus NoteStat;
         }
         public static SelectedNoteData SelectedData;
@@ -213,6 +216,7 @@ namespace SoflanSupport
             GUILayout.BeginArea(new Rect(Screen.width - panelW - 10f, 10f, panelW, 440f), "Soflan Monitor (F8 | 右键选Tap)", GUI.skin.box);
             GUILayout.Label($"PlayTime: {_msec:F1} ms  ({timeStr})");
             GUILayout.Label($"SoflanGroup0 Speed: {_speed0:F3}x" + (_hasData ? "" : " (no data)"));
+            GUILayout.Label($"MaiBugAdjust: {(Setting.EnableSoflanMaiBugAdjust ? "Enabled" : "Disabled")}");
             GUILayout.Label($"FPS: {_fps:F1}");
             _showAllGroups = GUILayout.Toggle(_showAllGroups, "显示所有 group 倍率");
             if (_showAllGroups && _hasData)
@@ -233,6 +237,8 @@ namespace SoflanSupport
                 GUILayout.Label($"moveProgress: {d.MoveProgress:F3}  finalScale: {d.FinalScale:F3}");
                 GUILayout.Label($"Fixed: {d.IsFixedSoflanToUnifiedSpeed}  FixedSpd: {d.FixedSoflanUnifiedSpeed:F3}");
                 GUILayout.Label($"FixedMoveP: {d.FixedMotionProgress:F3}  FixedScaleP: {d.FixedScaleProgress:F3}");
+                GUILayout.Label($"MaiBug: {(d.MaiBugAdjustEnabled ? "Enabled" : "Disabled")}  {d.MaiBugAdjustMsec:F3}ms  AdjustedAudio: {d.MaiBugAdjustedAudioMsec:F3}");
+                GUILayout.Label($"RawSoflanTime: {d.RawCurrentSoflanTime:F3}  Adjusted: {d.AdjustedCurrentSoflanTime:F3}");
                 GUILayout.Label($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
                 GUILayout.Label($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
             }
@@ -274,6 +280,8 @@ namespace SoflanSupport
                 sb.AppendLine($"moveProgress: {d.MoveProgress:F3}  finalScale: {d.FinalScale:F3}");
                 sb.AppendLine($"Fixed: {d.IsFixedSoflanToUnifiedSpeed}  FixedSpd: {d.FixedSoflanUnifiedSpeed:F3}");
                 sb.AppendLine($"FixedMoveP: {d.FixedMotionProgress:F3}  FixedScaleP: {d.FixedScaleProgress:F3}");
+                sb.AppendLine($"MaiBug: {(d.MaiBugAdjustEnabled ? "Enabled" : "Disabled")}  {d.MaiBugAdjustMsec:F3}ms  AdjustedAudio: {d.MaiBugAdjustedAudioMsec:F3}");
+                sb.AppendLine($"RawSoflanTime: {d.RawCurrentSoflanTime:F3}  Adjusted: {d.AdjustedCurrentSoflanTime:F3}");
                 sb.AppendLine($"insideY: {d.InsideY:F2}  outsideY: {d.OutsideY:F2}");
                 sb.AppendLine($"soflanY: {d.SoflanY:F2}  clipedSoflanY: {d.ClipedSoflanY:F2}");
             }

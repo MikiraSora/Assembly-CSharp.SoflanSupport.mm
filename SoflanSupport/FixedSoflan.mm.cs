@@ -44,23 +44,24 @@ namespace SoflanSupport
 
         public static float GetDefaultMsec(float unifiedSpeed)
         {
-            return 240000f / unifiedSpeed;
+            return MaiBugAdjust.DefaultMsecNumerator / unifiedSpeed;
         }
 
         public static float GetMaiBugAdjustMSec(float unifiedSpeed)
         {
-            float speedRatio = unifiedSpeed / 150f;
-            return (speedRatio - 1f) * (-0.5f / speedRatio) * 1.6f * 1000f / 60f;
+            return MaiBugAdjust.Calculate(unifiedSpeed, Setting.EnableSoflanMaiBugAdjust);
         }
 
         public static float GetMoveStartTime(float unifiedSpeed)
         {
-            return GetDefaultMsec(unifiedSpeed) - GetMaiBugAdjustMSec(unifiedSpeed);
+            // MaiBug 已通过 currentAudioMsec + adjustMsec 映射进 Soflan 时间轴，
+            // 这里的门槛保持为纯 Soflan Y 距离，避免重复应用补偿。
+            return GetDefaultMsec(unifiedSpeed);
         }
 
         public static float GetScaleStartTime(float unifiedSpeed)
         {
-            return 2f * GetDefaultMsec(unifiedSpeed) - GetMaiBugAdjustMSec(unifiedSpeed);
+            return 2f * GetDefaultMsec(unifiedSpeed);
         }
 
         public static float GetVisibleMsec(float unifiedSpeed)

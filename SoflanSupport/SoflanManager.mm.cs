@@ -27,7 +27,7 @@ namespace SoflanSupport
         private int visibleRangeCacheVersion = 0;
         private Dictionary<int, VisibleMsecRangeCache> visibleRangeListMap = new();
         private float cachedCurrentSoflanTimeMsec = float.MinValue;
-        private Dictionary<int, float> cachedCurrentSoflanTimeMap = new();
+        private Dictionary<CurrentSoflanTimeCacheKey, float> cachedCurrentSoflanTimeMap = new();
 
         /// <summary>
         /// clear all
@@ -272,14 +272,55 @@ namespace SoflanSupport
         private sealed class VisibleMsecRangeCache
         {
             public int Version;
+            public float CurrentSoflanTime = float.MinValue;
+            public float ApperMsec = float.MinValue;
             public readonly List<SoflanList.VisibleMsecRange> Ranges = new List<SoflanList.VisibleMsecRange>();
             public readonly SoflanList.VisibleRangeQueryScratch VisibleRangeScratch = new SoflanList.VisibleRangeQueryScratch();
         }
 
+        private struct CurrentSoflanTimeCacheKey : IEquatable<CurrentSoflanTimeCacheKey>
+        {
+            public readonly int Group;
+            public readonly float AudioOffsetMsec;
+
+            public CurrentSoflanTimeCacheKey(int group, float audioOffsetMsec)
+            {
+                Group = group;
+                AudioOffsetMsec = audioOffsetMsec;
+            }
+
+            public bool Equals(CurrentSoflanTimeCacheKey other)
+            {
+                return Group == other.Group && AudioOffsetMsec.Equals(other.AudioOffsetMsec);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is CurrentSoflanTimeCacheKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return (Group * 397) ^ AudioOffsetMsec.GetHashCode();
+                }
+            }
+        }
+
         public bool checkNoteVisible(NoteData noteData, float currentMsec, float apperMsec)
         {
+            if (noteData == null)
+                return false;
+
             var soflanGroup = getNoteSoflanGroup(noteData);
-            var currentSoflanTime = GetCurrentSoflanTimeCached(currentMsec, soflanGroup);
+            var maiBugAdjustMsec = SoflanVisualTiming.GetMaiBugAdjustMsec(
+                noteData.type.getEnum(),
+                apperMsec);
+            var currentSoflanTime = GetCurrentSoflanTimeWithAudioOffsetCached(
+                currentMsec,
+                maiBugAdjustMsec,
+                soflanGroup);
             return checkNoteVisible(noteData, currentMsec, apperMsec, soflanGroup, currentSoflanTime);
         }
 
@@ -378,7 +419,9 @@ namespace SoflanSupport
                 visibleRangeListMap[soflanGroup] = cache;
             }
 
-            if (cache.Version == visibleRangeCacheVersion)
+            if (cache.Version == visibleRangeCacheVersion
+                && cache.CurrentSoflanTime == currentSoflanTime
+                && cache.ApperMsec == apperMsec)
                 return cache.Ranges;
 
             cache.Ranges.Clear();
@@ -388,6 +431,8 @@ namespace SoflanSupport
             soflanList.FillVisibleMsecRangesForGamePreview(currentSoflanTime, apperMsec, bpmList, cache.Ranges, cache.VisibleRangeScratch);
 
             cache.Version = visibleRangeCacheVersion;
+            cache.CurrentSoflanTime = currentSoflanTime;
+            cache.ApperMsec = apperMsec;
             return cache.Ranges;
         }
 
@@ -404,16 +449,23 @@ namespace SoflanSupport
 
         public float GetCurrentSoflanTimeCached(float currentMsec, int soflanGroup)
         {
+            return GetCurrentSoflanTimeWithAudioOffsetCached(currentMsec, 0f, soflanGroup);
+        }
+
+        public float GetCurrentSoflanTimeWithAudioOffsetCached(float currentMsec, float audioOffsetMsec, int soflanGroup)
+        {
             if (cachedCurrentSoflanTimeMsec != currentMsec)
             {
                 cachedCurrentSoflanTimeMsec = currentMsec;
                 cachedCurrentSoflanTimeMap.Clear();
             }
 
-            if (!cachedCurrentSoflanTimeMap.TryGetValue(soflanGroup, out var soflanTime))
+            var key = new CurrentSoflanTimeCacheKey(soflanGroup, audioOffsetMsec);
+            if (!cachedCurrentSoflanTimeMap.TryGetValue(key, out var soflanTime))
             {
-                soflanTime = ConvertAudioTimeToY_PreviewMode(currentMsec, soflanGroup);
-                cachedCurrentSoflanTimeMap[soflanGroup] = soflanTime;
+                var adjustedAudioMsec = MaiBugAdjust.ApplyToAudioMsec(currentMsec, audioOffsetMsec);
+                soflanTime = ConvertAudioTimeToY_PreviewMode(adjustedAudioMsec, soflanGroup);
+                cachedCurrentSoflanTimeMap[key] = soflanTime;
             }
 
             return soflanTime;

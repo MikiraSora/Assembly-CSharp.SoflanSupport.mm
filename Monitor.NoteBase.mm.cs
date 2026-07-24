@@ -27,6 +27,8 @@ namespace Monitor
         private float noteSoflanTime;
         private bool isFixedSoflanToUnifiedSpeed;
         private float fixedSoflanUnifiedSpeed;
+        private float visualDefaultMsec;
+        private float maiBugAdjustMsec;
 
 #if DEBUG
         // --- 调试面板选中 (右键点击 Tap) ---
@@ -34,6 +36,8 @@ namespace Monitor
         // 本类通过 SoflanPanelBehaviour.IsNoteSelected(this) 查询。
         private Color _origSpriteColor;         // 选中前的原 sprite color, 取消选中时恢复
         private bool _colorSaved;
+        private float _rawCurrentSoflanTime;
+        private float _adjustedCurrentSoflanTime;
 #endif
 
         public extern void orig_Initialize(NoteData note);
@@ -78,6 +82,12 @@ namespace Monitor
             fixedSoflanUnifiedSpeed = fixedNote.fixedSoflanUnifiedSpeed > 0f
                 ? fixedNote.fixedSoflanUnifiedSpeed
                 : FixedSoflan.DefaultUnifiedSpeed;
+            visualDefaultMsec = isFixedSoflanToUnifiedSpeed
+                ? FixedSoflan.GetDefaultMsec(fixedSoflanUnifiedSpeed)
+                : DefaultMsec;
+            maiBugAdjustMsec = SoflanVisualTiming.GetMaiBugAdjustMsec(
+                note.type.getEnum(),
+                2f * visualDefaultMsec);
 
         }
 
@@ -92,11 +102,11 @@ namespace Monitor
                 //recalculate scale in soflan
                 /* absDiffTime数值含义:
 
-                           scale=0       -----  2 * DefaultMsec - GetMaiBugAdjustMSec()
+                           scale=0       -----  2 * visualDefaultMsec
                                            |
                                            |
                                            |
-                           scale=1       -----      DefaultMsec - GetMaiBugAdjustMSec()
+                           scale=1       -----      visualDefaultMsec
                                            |
                                            |
                                            |
@@ -104,9 +114,7 @@ namespace Monitor
                 */
                 var absDiffTime = Math.Abs(GetSoflanTimeDiff());
 
-                var scale = isFixedSoflanToUnifiedSpeed
-                    ? FixedSoflan.GetScaleProgress(absDiffTime, fixedSoflanUnifiedSpeed)
-                    : Mathf.Clamp01((2f * DefaultMsec - GetMaiBugAdjustMSec() - absDiffTime) / DefaultMsec);
+                var scale = Mathf.Clamp01((2f * visualDefaultMsec - absDiffTime) / visualDefaultMsec);
                 scale *= Singleton<GamePlayManager>.Instance.GetGameScore(MonitorId).UserOption.NoteSize.GetValue();
                 NoteObj.transform.localScale = new Vector3(scale, scale, 0f);
             }
@@ -132,7 +140,19 @@ namespace Monitor
 
         private float GetSoflanTimeDiff()
         {
-            var currentSoflanTime = soflanManager.GetCurrentSoflanTimeCached(NotesManager.GetCurrentMsec(), noteSoflanGroup);
+            return GetSoflanTimeDiff(NotesManager.GetCurrentMsec());
+        }
+
+        private float GetSoflanTimeDiff(float currentMsec)
+        {
+            var currentSoflanTime = soflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+                currentMsec,
+                maiBugAdjustMsec,
+                noteSoflanGroup);
+#if DEBUG
+            _rawCurrentSoflanTime = soflanManager.GetCurrentSoflanTimeCached(currentMsec, noteSoflanGroup);
+            _adjustedCurrentSoflanTime = currentSoflanTime;
+#endif
             return noteSoflanTime - currentSoflanTime;
         }
 
@@ -184,11 +204,11 @@ namespace Monitor
                                            |
                                            |
                                            |
-                         guideScale=1    -----   scaleStartTime = 2 * DefaultMsec - GetMaiBugAdjustMSec()
+                         guideScale=1    -----   scaleStartTime = 2 * visualDefaultMsec
                                            |
                                            |
                                            |
-              y=120      guideScale=1    -----   moveStartTime = DefaultMsec - GetMaiBugAdjustMSec()
+              y=120      guideScale=1    -----   moveStartTime = visualDefaultMsec
                                            |
                                            |
                                            |
@@ -196,32 +216,22 @@ namespace Monitor
                                            |
                                            |
                                            |
-              y=680       scale=1        -----   -moveStartTime = -(DefaultMsec - GetMaiBugAdjustMSec())
+              y=680       scale=1        -----   -moveStartTime = -visualDefaultMsec
 
 
             */
             var currentTime = NotesManager.GetCurrentMsec();
-            var diffTime = GetSoflanTimeDiff();
+            var diffTime = GetSoflanTimeDiff(currentTime);
             var absDiffTime = Math.Abs(diffTime);
 
-            var scaleStartTime = isFixedSoflanToUnifiedSpeed
-                ? FixedSoflan.GetScaleStartTime(fixedSoflanUnifiedSpeed)
-                : 2 * DefaultMsec - GetMaiBugAdjustMSec();
-            var moveStartTime = isFixedSoflanToUnifiedSpeed
-                ? FixedSoflan.GetMoveStartTime(fixedSoflanUnifiedSpeed)
-                : DefaultMsec - GetMaiBugAdjustMSec();
+            var scaleStartTime = 2f * visualDefaultMsec;
+            var moveStartTime = visualDefaultMsec;
             var fixedMotionProgress = isFixedSoflanToUnifiedSpeed
                 ? FixedSoflan.GetMotionProgress(diffTime, fixedSoflanUnifiedSpeed)
                 : 0f;
             var fixedScaleProgress = isFixedSoflanToUnifiedSpeed
                 ? FixedSoflan.GetScaleProgress(absDiffTime, fixedSoflanUnifiedSpeed)
                 : 0f;
-
-            var speedRatio = Singleton<GamePlayManager>.Instance
-                          .GetGameScore(MonitorId)
-                          .UserOption
-                          .GetNoteSpeed
-                          .GetValue() / 150f;
 
             /*  强制重新计算Guide物件缩放
                 diffTime = moveStartTime             0             -moveStartTime
@@ -230,7 +240,6 @@ namespace Monitor
                               StartPos              EndPos      EndPos + (EndPos - StartPos)
              */
 
-            var offsetYAdj = (EndPos - StartPos) * (-1f / 120f) * (speedRatio - 1f);
             var guideScaleAdj = 0; //(-1f / 120f) * (speedRatio - 1f) * 0.75f;
 
             /*  强制重新计算物件pos位置
@@ -245,9 +254,9 @@ namespace Monitor
             var soflanY = isFixedSoflanToUnifiedSpeed
                 ? FixedSoflan.GetYFromMotionProgress(StartPos, EndPos, fixedMotionProgress)
                 : MathUtils.MapValue(diffTime, -moveStartTime, moveStartTime, outsideY, insideY);
-            //todo 可能有问题
-            var sign = 0;// currentTime > AppearMsec ? 0 : Math.Sign(diffTime);
-            var adjustedSoflanY = soflanY + sign * offsetYAdj;
+            // MaiBug 的音频毫秒偏移已在 GetSoflanTimeDiff 中经过 Soflan 时间轴映射；
+            // 这里不再叠加独立坐标偏移，否则会重复补偿。
+            var adjustedSoflanY = soflanY;
 
             var clipedSoflanY = Mathf.Clamp(adjustedSoflanY, 120, 680);
 
@@ -310,6 +319,11 @@ namespace Monitor
                     FixedSoflanUnifiedSpeed = fixedSoflanUnifiedSpeed,
                     FixedMotionProgress = fixedMotionProgress,
                     FixedScaleProgress = fixedScaleProgress,
+                    MaiBugAdjustEnabled = Setting.EnableSoflanMaiBugAdjust,
+                    MaiBugAdjustMsec = maiBugAdjustMsec,
+                    MaiBugAdjustedAudioMsec = MaiBugAdjust.ApplyToAudioMsec(currentTime, maiBugAdjustMsec),
+                    RawCurrentSoflanTime = _rawCurrentSoflanTime,
+                    AdjustedCurrentSoflanTime = _adjustedCurrentSoflanTime,
                 };
                 SoflanPanelBehaviour.HasSelectedData = true;
             }
