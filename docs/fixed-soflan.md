@@ -140,12 +140,17 @@ MaiBug 偏移先应用到真实音频时间，再转换为 Soflan Y；移动和�
 Soflan Y 距离：
 
 ```csharp
-AdjustedCurrentAudioMsec = CurrentAudioMsec + MaiBugAdjustMSec
+RawCurrentAudioMsec = CurrentAudioMsec - RuntimeChartOffsetMsec
+AdjustedCurrentAudioMsec = RawCurrentAudioMsec + MaiBugAdjustMSec
 CurrentSoflanTime = ConvertAudioTimeToY(AdjustedCurrentAudioMsec, group)
 MoveStartTime = DefaultMsec
 ScaleStartTime = 2 * DefaultMsec
 VisibleMsec = DefaultMsec * 2
 ```
+
+`RuntimeChartOffsetMsec` 是谱面加载时按 player/monitor 快照的
+`UserOption.GetAdjustMSec()`。该基础换算始终启用；
+`EnableSoflanMaiBugAdjust` 只控制最后的 `MaiBugAdjustMSec`。
 
 是否应用该偏移由 `mai2.ini` 的
 `[Patches] EnableSoflanMaiBugAdjust` 控制，默认启用。关闭时
@@ -197,7 +202,7 @@ ScaleProgress = Clamp01((ScaleStartTime - absDiffTime) / DefaultMsec)
 ```text
 DefaultMsec = 400ms
 MaiBugAdjustMSec = -10ms
-AdjustedCurrentAudioMsec = CurrentAudioMsec - 10ms
+AdjustedCurrentAudioMsec = CurrentAudioMsec - RuntimeChartOffsetMsec - 10ms
 MoveStartTime = 400 Soflan-Y ms
 ScaleStartTime = 800 Soflan-Y ms
 VisibleMsec = 800ms
@@ -220,8 +225,9 @@ VisibleMsec = 800ms
 FixedSoflan.GetVisibleMsec(FixedSoflan.GetUnifiedSpeed(note))
 ```
 
-这样可见性窗口不会因为玩家物件速度不同而改变。窗口起点同时使用
-`CurrentAudioMsec + MaiBugAdjustMSec` 转换得到的 Soflan 时间，保证注册时机与视觉进度一致。
+这样可见性窗口不会因为玩家物件速度不同而改变。窗口起点使用
+`CurrentAudioMsec - RuntimeChartOffsetMsec + MaiBugAdjustMSec` 转换得到的
+Soflan 时间，保证注册时机、MA2 原始时间轴和视觉进度一致。
 
 ### Tap 系移动和缩放
 
@@ -239,7 +245,8 @@ FixedSoflan.GetVisibleMsec(FixedSoflan.GetUnifiedSpeed(note))
 
 - 普通 Soflan 使用玩家速度计算 MaiBug 音频偏移和 `DefaultMsec`。
 - FixedSoflan 使用声明速度计算同一组参数。
-- 两者都调用 `GetCurrentSoflanTimeWithAudioOffsetCached()`，把偏移后的音频时间映射为当前 Soflan 时间。
+- 两者都调用 `GetCurrentSoflanTimeWithOffsetsCached()`，先移除当前玩家的
+  `GetAdjustMSec()`，再把 MaiBug 偏移后的原始谱面时间映射为当前 Soflan 时间。
 - Y、Guide 和缩放统一使用调整后的 `diffTime`；不再另外叠加 `offsetYAdj`，避免重复补偿。
 
 ### BreakNote 缩放
@@ -291,7 +298,7 @@ MajdataEdit / MajSimaiX 的 MajSimai 源语法可以用 `<HS?*speed>(...)` 创�
 
 ## 行为边界
 
-- FixedSoflan 只在 `SoflanManager.containsSoflans()` 为 true 的谱面里生效。
+- FixedSoflan 只在当前玩家的 `SoflanManager.containsSoflans(playerId)` 为 true 时生效。
 - 无 SFL 谱面里，即使 note record 写了 `#F`，显示逻辑仍回到原版。
 - 判定窗口不变，仍按真实音频时间。
 - Star 旋转没有被修改。
@@ -315,7 +322,7 @@ dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release
 - `SoflanSupport.FixedSoflan` 被注入到目标程序集。
 - `SoflanManager.loadNote()` 会调用 FixedSoflan marker parser，并在错误时调用日志和抛异常路径。
 - `GameCtrl.__SoflanNoteDecision()` 中 FixedSoflan 物件使用 `FixedSoflan.GetVisibleMsec()`。
-- `NoteBase.GetSoflanTimeDiff()` 调用 `GetCurrentSoflanTimeWithAudioOffsetCached()`。
+- `NoteBase.GetSoflanTimeDiff()` 调用 `GetCurrentSoflanTimeWithOffsetsCached()`。
 - `NoteBase.GetNoteYPosition_soflan()` 使用纯 `DefaultMsec / 2*DefaultMsec` Soflan-Y 门槛。
 - `NoteBase.NoteCheck()` 和 `BreakNote.NoteCheck()` 使用调整后的 `diffTime` 重算缩放。
 - DEBUG 面板含 FixedSoflan 的选中 note 字段和显示文本。

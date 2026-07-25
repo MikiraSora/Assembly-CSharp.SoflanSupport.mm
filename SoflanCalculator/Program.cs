@@ -1,6 +1,6 @@
 ﻿// Program — SoflanCalculator 入口.
-// 用法: SoflanCalculator.exe <ma2文件路径> <物件行号(1-based)> <当前时间msec>
-//       进入后可交互输入 line= / ma2= / time= / speed= 切换并重新计算.
+// 用法: SoflanCalculator.exe <ma2文件路径> <物件行号(1-based)> <运行时当前时间msec> [GetAdjustMSec]
+//       进入后可交互输入 line= / ma2= / time= / speed= / offset= 切换并重新计算.
 using System;
 using System.IO;
 using System.Linq;
@@ -18,13 +18,14 @@ namespace SoflanCalculator
         //   Speed1.0=200, Speed5.0=600, Speed10.0=1100, Sonic=5000
         // 运行时可由 speed= 命令修改.
         private static float s_noteSpeedValue = 600f;  // 默认 Speed 5.0
+        private static float s_runtimeChartOffsetMsec; // 默认 0；游戏默认 Normal 通常约 60ms
 
         private static int Main(string[] args)
         {
             if (args.Length < 3)
             {
-                Console.Error.WriteLine("用法: SoflanCalculator.exe <ma2文件路径> <物件行号(1-based)> <当前时间msec>");
-                Console.Error.WriteLine("示例: SoflanCalculator.exe \"D:\\charts\\008.ma2\" 42 2500");
+                Console.Error.WriteLine("用法: SoflanCalculator.exe <ma2文件路径> <物件行号(1-based)> <运行时当前时间msec> [GetAdjustMSec]");
+                Console.Error.WriteLine("示例: SoflanCalculator.exe \"D:\\charts\\008.ma2\" 42 2560 60");
                 return 1;
             }
 
@@ -37,6 +38,11 @@ namespace SoflanCalculator
             if (!float.TryParse(args[2], out float currentMsec))
             {
                 Console.Error.WriteLine($"错误: 当前时间msec无效 -> {args[2]}");
+                return 1;
+            }
+            if (args.Length > 3 && !float.TryParse(args[3], out s_runtimeChartOffsetMsec))
+            {
+                Console.Error.WriteLine($"错误: GetAdjustMSec 无效 -> {args[3]}");
                 return 1;
             }
 
@@ -61,7 +67,7 @@ namespace SoflanCalculator
             while (true)
             {
                 Console.WriteLine();
-                Console.WriteLine($"[当前] ma2={Path.GetFileName(filePath)}  line={lineNumber}  time={currentMsec:F0}  speed={s_noteSpeedValue:F0}({SpeedLabel(s_noteSpeedValue)})");
+                Console.WriteLine($"[当前] ma2={Path.GetFileName(filePath)}  line={lineNumber}  time={currentMsec:F0}  offset={s_runtimeChartOffsetMsec:F3}  speed={s_noteSpeedValue:F0}({SpeedLabel(s_noteSpeedValue)})");
                 Console.Write("> ");
                 string input = Console.ReadLine();
                 if (input == null)
@@ -81,6 +87,7 @@ namespace SoflanCalculator
                 int? newLine = null;
                 float? newTime = null;
                 float? newSpeed = null;
+                float? newOffset = null;
 
                 bool parseError = false;
                 foreach (var token in input.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
@@ -88,7 +95,7 @@ namespace SoflanCalculator
                     int eq = token.IndexOf('=');
                     if (eq <= 0)
                     {
-                        Console.Error.WriteLine($"  无法识别: {token}  (格式: line=42 / ma2=path / time=2500 / speed=600)");
+                        Console.Error.WriteLine($"  无法识别: {token}  (格式: line=42 / ma2=path / time=2560 / speed=600 / offset=60)");
                         parseError = true;
                         continue;
                     }
@@ -131,8 +138,18 @@ namespace SoflanCalculator
                             }
                             break;
 
+                        case "offset":
+                            if (float.TryParse(val, out float ov))
+                                newOffset = ov;
+                            else
+                            {
+                                Console.Error.WriteLine($"  offset 解析失败: {val}");
+                                parseError = true;
+                            }
+                            break;
+
                         default:
-                            Console.Error.WriteLine($"  未知命令: {key}  (可用: line / ma2 / time / speed)");
+                            Console.Error.WriteLine($"  未知命令: {key}  (可用: line / ma2 / time / speed / offset)");
                             parseError = true;
                             break;
                     }
@@ -178,6 +195,9 @@ namespace SoflanCalculator
                 if (newSpeed.HasValue)
                     s_noteSpeedValue = newSpeed.Value;
 
+                if (newOffset.HasValue)
+                    s_runtimeChartOffsetMsec = newOffset.Value;
+
                 TryComputeAndPrint(data, filePath, lineNumber, currentMsec);
             }
         }
@@ -189,7 +209,7 @@ namespace SoflanCalculator
         private static int FindNextCommand(string s)
         {
             int earliest = -1;
-            foreach (var cmd in new[] { "line=", "ma2=", "time=", "speed=" })
+            foreach (var cmd in new[] { "line=", "ma2=", "time=", "speed=", "offset=" })
             {
                 int idx = s.IndexOf(cmd, StringComparison.OrdinalIgnoreCase);
                 if (idx >= 0 && (earliest < 0 || idx < earliest))
@@ -239,7 +259,15 @@ namespace SoflanCalculator
             CalcResult r;
             try
             {
-                r = SoflanCalcEngine.Calculate(data, note, currentMsec, s_noteSpeedValue, StartPos, EndPos);
+                r = SoflanCalcEngine.Calculate(
+                    data,
+                    note,
+                    currentMsec,
+                    s_noteSpeedValue,
+                    StartPos,
+                    EndPos,
+                    true,
+                    s_runtimeChartOffsetMsec);
             }
             catch (Exception ex)
             {
@@ -273,6 +301,8 @@ namespace SoflanCalculator
             Console.WriteLine($"AppearMsec:        {r.AppearMsec:F3}");
             Console.WriteLine($"noteSoflanTime:    {r.NoteSoflanTime:F3}");
             Console.WriteLine($"currentMsec:       {r.CurrentMsec:F3}");
+            Console.WriteLine($"runtimeOffset:     {r.RuntimeChartOffsetMsec:F3}");
+            Console.WriteLine($"rawChartMsec:      {r.RawChartCurrentMsec:F3}");
             Console.WriteLine($"maiBugCurrentMsec: {r.MaiBugAdjustedCurrentMsec:F3}");
             Console.WriteLine($"rawSoflanTime:     {r.RawCurrentSoflanTime:F3}");
             Console.WriteLine($"currentSoflanTime: {r.CurrentSoflanTime:F3} (MaiBug adjusted)");
@@ -287,6 +317,8 @@ namespace SoflanCalculator
             Console.WriteLine($"NoteStat:          {r.NoteStat}");
             Console.WriteLine($"moveProgress:      {r.MoveProgress:F3}");
             Console.WriteLine($"finalScale:        {r.FinalScale:F3}");
+            Console.WriteLine($"objectScale:       {r.ObjectScaleProgress:F3}");
+            Console.WriteLine($"guideAlpha:        {r.GuideAlpha:F3}");
             Console.WriteLine($"insideY:           {r.InsideY:F3}");
             Console.WriteLine($"outsideY:          {r.OutsideY:F3}");
             Console.WriteLine($"soflanY:           {r.SoflanY:F3}");

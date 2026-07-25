@@ -100,13 +100,13 @@ Runtime does not parse MajSimai `<HS...>` commands. HS commands must be converte
 
 Important runtime hooks:
 
-1. `NotesReader.loadMa2Main()` calls Soflan clear before BPM calculation.
-2. `SoflanManager.clearAll()` resets Soflan lists, visible-range caches, current Soflan time cache, and note group registration.
-3. `SoflanManager.loadComposition()` reads the MA2 file, parses `SFL` rows, and builds `BpmList`.
-4. `NotesReader.loadNote()` calls `SoflanManager.loadNote()` before returning each note.
-5. `loadNote()` registers `noteIndex -> group` and, when the marker has `F`, writes FixedSoflan fields.
+1. `NotesReader.loadMa2Main()` passes `_playerID` to the per-player Soflan clear before BPM calculation.
+2. `SoflanManager.clearPlayer(playerId)` removes only that player's Soflan state.
+3. `SoflanManager.loadComposition()` reads `SFL`, builds the player's `BpmList`, and snapshots the same player's `UserOption.GetAdjustMSec()`.
+4. `NotesReader.loadNote()` passes `_playerID` to `SoflanManager.loadNote()` before returning each note.
+5. `loadNote()` registers per-player `noteIndex -> group/TGrid` and, when the marker has `F`, writes FixedSoflan fields.
 
-If a chart contains no `SFL` rows, `SoflanManager.containsSoflans()` remains false and note visual patches fall back to original behavior.
+If a player's chart contains no `SFL` rows, `SoflanManager.containsSoflans(playerId)` remains false and note visual patches fall back to original behavior.
 
 ## Visibility
 
@@ -114,15 +114,23 @@ Original visibility uses audio time and player note speed. Soflan visibility use
 
 ```csharp
 currentMsec = NotesManager.GetCurrentMsec()
-group = getNoteSoflanGroup(note)
-currentSoflanTime = GetCurrentSoflanTimeCached(currentMsec, group)
+group = getNoteSoflanGroup(monitorId, note)
+currentSoflanTime = GetCurrentSoflanTimeWithOffsetsCached(
+    monitorId, currentMsec, visualAudioOffsetMsec, group)
 visibleMsec = FixedSoflan.IsEnabledForNote(note) ? FixedSoflanVisibleMsec : num
 checkNoteVisible(note, currentMsec, visibleMsec, group, currentSoflanTime)
 ```
 
 Conceptually it maps `[currentSoflanTime, currentSoflanTime + visibleMsec]` back to one or more original audio-time ranges, then checks whether `note.time.msec` falls inside any range. This is required for stop, reverse, and bounce behavior.
 
-The current implementation rebuilds visible ranges lazily per group per frame and caches current Soflan time per group.
+The runtime converts the current clock before Soflan integration:
+
+```text
+rawCurrent = runtimeCurrent - UserOption.GetAdjustMSec() + visualAudioOffset
+diff = F_group(noteRawMsec) - F_group(rawCurrent)
+```
+
+The implementation rebuilds visible ranges lazily per player/group per frame and caches current Soflan time by player, group, normalized chart offset, and visual offset.
 
 ## Soflan Y Integration
 

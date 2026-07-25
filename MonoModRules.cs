@@ -1,7 +1,7 @@
 // MonoModRules — 在 patch 时运行, 通过 PostProcessor 对 4 个目标方法做精确 IL 插入.
 // 对应 head 中无法用 orig_ 表达的"方法体中间插入":
-//   1. NotesReader.loadMa2Main : calcBPMList 前 __SoflanClearAll ; calcTotal 后 __SoflanLoadComposition
-//   2. NotesReader.loadNote    : ret 前 __SoflanLoadNote(noteData, rec, this)
+//   1. NotesReader.loadMa2Main : calcBPMList 前 __SoflanClearPlayer ; calcTotal 后 __SoflanLoadComposition
+//   2. NotesReader.loadNote    : ret 前 __SoflanLoadNote(noteData, rec, this, _playerID)
 //   3. GameCtrl.UpdateCtrl     : UserOption 后 __SoflanClearCache ; msec 检查前 __SoflanNoteDecision 派发
 //   4. GameProcess.OnUpdate    : 方法起始 __SoflanUpdateGamePlayFumenController
 // 锚点基于被检视的真实 base IL (Mono.Cecil). 插入调用引用的辅助方法由 patch_ 类复制进目标类型.
@@ -134,6 +134,14 @@ namespace MonoMod
             return m;
         }
 
+        private static FieldDefinition GetOwnField(TypeDefinition type, string name)
+        {
+            var field = type.Fields.FirstOrDefault(x => x.Name == name);
+            if (field == null)
+                throw new Exception($"[SoflanRules] field not found on {type.FullName}: {name}");
+            return field;
+        }
+
         private static bool IsCallTo(Instruction ins, string calleeName)
         {
             return (ins.OpCode == OpCodes.Call || ins.OpCode == OpCodes.Callvirt)
@@ -247,19 +255,25 @@ namespace MonoMod
             var body = method.Body;
             var il = body.GetILProcessor();
 
-            var clearAll = GetOwnMethod(type, "__SoflanClearAll");
+            var clearPlayer = GetOwnMethod(type, "__SoflanClearPlayer");
             var loadComp = GetOwnMethod(type, "__SoflanLoadComposition");
+            var playerIdField = GetOwnField(type, "_playerID");
 
-            // (a) calcBPMList 调用前插入 call __SoflanClearAll()
+            // (a) calcBPMList 调用前插入 ldarg.0 ldfld _playerID call __SoflanClearPlayer(int)
             var calcBPM = body.Instructions.FirstOrDefault(i => IsCallTo(i, "calcBPMList"));
             if (calcBPM == null) throw new Exception("[SoflanRules] loadMa2Main: anchor calcBPMList not found");
-            il.InsertBefore(calcBPM, il.Create(OpCodes.Call, clearAll));
+            il.InsertBefore(calcBPM, il.Create(OpCodes.Ldarg_0));
+            il.InsertBefore(calcBPM, il.Create(OpCodes.Ldfld, playerIdField));
+            il.InsertBefore(calcBPM, il.Create(OpCodes.Call, clearPlayer));
 
-            // (b) calcTotal 调用后插入 ldarg.2(records) ldarg.0(this) call __SoflanLoadComposition
+            // (b) calcTotal 调用后插入 records, this, _playerID, call __SoflanLoadComposition
             var calcTotal = body.Instructions.FirstOrDefault(i => IsCallTo(i, "calcTotal"));
             if (calcTotal == null) throw new Exception("[SoflanRules] loadMa2Main: anchor calcTotal not found");
-            // InsertAfter 需逆序以保持正序: 目标序列 [ldarg.2, ldarg.0, call]
+            // InsertAfter 需逆序以保持正序:
+            // [ldarg.2, ldarg.0, ldarg.0, ldfld _playerID, call]
             il.InsertAfter(calcTotal, il.Create(OpCodes.Call, loadComp));
+            il.InsertAfter(calcTotal, il.Create(OpCodes.Ldfld, playerIdField));
+            il.InsertAfter(calcTotal, il.Create(OpCodes.Ldarg_0));
             il.InsertAfter(calcTotal, il.Create(OpCodes.Ldarg_0));
             il.InsertAfter(calcTotal, il.Create(OpCodes.Ldarg_2));
         }
@@ -279,6 +293,7 @@ namespace MonoMod
             var body = method.Body;
             var il = body.GetILProcessor();
             var loadNoteHelper = GetOwnMethod(type, "__SoflanLoadNote");
+            var playerIdField = GetOwnField(type, "_playerID");
 
             // noteData 局部: 类型 Manager.NoteData
             var noteDataVar = body.Variables.FirstOrDefault(v => v.VariableType.FullName == "Manager.NoteData")
@@ -288,11 +303,13 @@ namespace MonoMod
             var ret = body.Instructions.LastOrDefault(i => i.OpCode == OpCodes.Ret)
                       ?? throw new Exception("[SoflanRules] loadNote: ret not found");
             // InsertBefore 连续调用产生书写顺序(正序), 故按期望执行顺序书写:
-            //   [ldloc noteData, ldarg.1(rec), ldarg.0(this), call]
+            //   [ldloc noteData, ldarg.1(rec), ldarg.0(this), ldarg.0, ldfld _playerID, call]
             // 先插入的指令离 ret 较远(先执行), 调用指令紧贴 ret(最后执行).
             il.InsertBefore(ret, il.Create(OpCodes.Ldloc, noteDataVar));
             il.InsertBefore(ret, il.Create(OpCodes.Ldarg_1));
             il.InsertBefore(ret, il.Create(OpCodes.Ldarg_0));
+            il.InsertBefore(ret, il.Create(OpCodes.Ldarg_0));
+            il.InsertBefore(ret, il.Create(OpCodes.Ldfld, playerIdField));
             il.InsertBefore(ret, il.Create(OpCodes.Call, loadNoteHelper));
         }
 
@@ -306,13 +323,16 @@ namespace MonoMod
             var il = body.GetILProcessor();
             var clearCache = GetOwnMethod(type, "__SoflanClearCache");
             var decision = GetOwnMethod(type, "__SoflanNoteDecision");
+            var monitorIndexField = GetOwnField(type, "monitorIndex");
 
-            // (a) UserOption 字段赋值后插入 ldarg.0 callvirt __SoflanClearCache
-            //     锚点: ldfld GameScoreList::UserOption (唯一). InsertAfter 逆序: [ldarg.0, callvirt]
+            // (a) UserOption 字段赋值后插入 this, monitorIndex, callvirt __SoflanClearCache
+            //     锚点: ldfld GameScoreList::UserOption (唯一). InsertAfter 逆序。
             var userOptLdfld = body.Instructions.FirstOrDefault(i =>
                 i.OpCode == OpCodes.Ldfld && i.Operand is FieldReference fr && fr.Name == "UserOption")
                 ?? throw new Exception("[SoflanRules] UpdateCtrl: anchor ldfld UserOption not found");
             il.InsertAfter(userOptLdfld, il.Create(OpCodes.Callvirt, clearCache));
+            il.InsertAfter(userOptLdfld, il.Create(OpCodes.Ldfld, monitorIndexField));
+            il.InsertAfter(userOptLdfld, il.Create(OpCodes.Ldarg_0));
             il.InsertAfter(userOptLdfld, il.Create(OpCodes.Ldarg_0));
 
             // (b) soflan 可见性派发: 插在原 msec 可见性检查的 GetCurrentMsec 调用前.
@@ -384,6 +404,8 @@ namespace MonoMod
                     il.InsertBefore(getCurrentMsec, dispatchStart);
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, noteVar));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, numVar));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldarg_0));
+                    il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldfld, monitorIndexField));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Callvirt, decision));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Stloc, decVar));
                     il.InsertBefore(getCurrentMsec, il.Create(OpCodes.Ldloc, decVar));

@@ -353,8 +353,8 @@ Release 产物 IL 已确认：
 
 以下现象真实，但应描述为容量权衡而不是泄漏：
 
-- `registerNoteIndexToSoflanGroupMap`、起止 TGrid map、`visibleRangeListMap` 和 current group time map 的外层 Dictionary 在 `Clear()` 后保留桶容量。
-- 切谱时 `visibleRangeListMap.Clear()` 已释放每 group 的 `Ranges` 和 scratch 引用；旧评审所说内部 List 跨谱永久保留不成立。
+- 每个 `PlayerSoflanState` 的 note group/起止 TGrid map、visible-range map 和 current group time map 在同一谱面内保留桶容量。
+- 切谱时 `clearPlayer(playerId)` 会移除整份玩家状态，BPM/SFL、note map、每 group 的 `Ranges` 和 scratch 都可回收；旧评审所说内部 List 跨谱永久保留不成立。
 - 同一谱内保留 List/scratch 容量是为了降低播放期分配，GC 暂停前提下通常是合理选择。
 
 可以在切谱时按容量阈值重建外层 Dictionary，以换取释放高水位内存；不要在播放热路径频繁丢弃内部缓冲。
@@ -365,8 +365,9 @@ Release 产物 IL 已确认：
 
 原评审发现 `currentTime` 未使用，且玩家速度、`offsetYAdj` 最终乘以恒为 `0` 的
 `sign`。MaiBug-Soflan 对齐改动现已删除这条死计算：音频毫秒偏移通过
-`GetCurrentSoflanTimeWithAudioOffsetCached()` 映射进 Soflan 时间轴，`currentTime`
-用于构造偏移后的音频时间，不再另外计算或叠加 `offsetYAdj`。
+`GetCurrentSoflanTimeWithOffsetsCached()` 在移除玩家级 `GetAdjustMSec()` 后把
+MaiBug 偏移映射进 Soflan 时间轴，`currentTime` 用于构造统一后的原始谱面时间，
+不再另外计算或叠加 `offsetYAdj`。
 
 ### 原版 scale 写入后被 Soflan scale 覆盖
 

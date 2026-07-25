@@ -24,14 +24,26 @@ namespace Monitor
             orig_Initialize(note);
 
             holdSoflanManager = Singleton<SoflanManager>.Instance;
-            holdIsInSoflan = holdSoflanManager.containsSoflans();
+            holdIsInSoflan = holdSoflanManager.containsSoflans(MonitorId);
             if (holdIsInSoflan)
             {
-                holdSoflanGroup = holdSoflanManager.getNoteSoflanGroup(NoteIndex);
-                var headAudioMsec = holdSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
-                var tailAudioMsec = holdSoflanManager.getNoteEndAudioMsecForSoflan(NoteIndex, TailMsec);
-                holdHeadSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(headAudioMsec, holdSoflanGroup);
-                holdTailSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(tailAudioMsec, holdSoflanGroup);
+                holdSoflanGroup = holdSoflanManager.getNoteSoflanGroup(MonitorId, NoteIndex);
+                var headAudioMsec = holdSoflanManager.getNoteAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    AppearMsec);
+                var tailAudioMsec = holdSoflanManager.getNoteEndAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    TailMsec);
+                holdHeadSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    headAudioMsec,
+                    holdSoflanGroup);
+                holdTailSoflanTime = holdSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    tailAudioMsec,
+                    holdSoflanGroup);
             }
             else
             {
@@ -51,7 +63,8 @@ namespace Monitor
             if (holdIsInSoflan && CheckSupportSoflan())
             {
                 float currentMsec = NotesManager.GetCurrentMsec();
-                float currentSoflanTime = holdSoflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+                float currentSoflanTime = holdSoflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                    MonitorId,
                     currentMsec,
                     holdMaiBugAdjustMsec,
                     holdSoflanGroup);
@@ -76,7 +89,8 @@ namespace Monitor
 
             if (holdIsInSoflan && CheckSupportSoflan())
             {
-                float currentSoflanTime = holdSoflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+                float currentSoflanTime = holdSoflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                    MonitorId,
                     NotesManager.GetCurrentMsec(),
                     holdMaiBugAdjustMsec,
                     holdSoflanGroup);

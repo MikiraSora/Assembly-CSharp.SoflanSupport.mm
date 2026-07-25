@@ -26,12 +26,18 @@ namespace Monitor
             orig_Initialize(note);
 
             breakSoflanManager = Singleton<SoflanManager>.Instance;
-            breakIsInSoflan = breakSoflanManager.containsSoflans();
+            breakIsInSoflan = breakSoflanManager.containsSoflans(MonitorId);
             if (breakIsInSoflan)
             {
-                breakSoflanGroup = breakSoflanManager.getNoteSoflanGroup(NoteIndex);
-                var noteAudioMsec = breakSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
-                breakNoteSoflanTime = breakSoflanManager.ConvertAudioTimeToY_PreviewMode(noteAudioMsec, breakSoflanGroup);
+                breakSoflanGroup = breakSoflanManager.getNoteSoflanGroup(MonitorId, NoteIndex);
+                var noteAudioMsec = breakSoflanManager.getNoteAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    AppearMsec);
+                breakNoteSoflanTime = breakSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    noteAudioMsec,
+                    breakSoflanGroup);
             }
             else
             {
@@ -71,7 +77,8 @@ namespace Monitor
 
         private float GetBreakSoflanTimeDiff()
         {
-            var currentSoflanTime = breakSoflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+            var currentSoflanTime = breakSoflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                MonitorId,
                 NotesManager.GetCurrentMsec(),
                 breakMaiBugAdjustMsec,
                 breakSoflanGroup);

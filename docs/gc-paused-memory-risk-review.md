@@ -73,7 +73,7 @@ var visibleRanges = soflanList.Value
 调试面板用静态字段 `_selectedNote` 保存被右键选中的 `NoteBase`。目前清理路径有:
 - note 池化复用时 `OnNoteReinitialized()`
 - 被选中 note 结束时 `OnSelectedNoteEnded()`
-- 谱面 `__SoflanClearAll()` 时 `ClearSelectedNote()`
+- 谱面 `__SoflanClearPlayer(_playerID)` 时 `ClearSelectedNote()`
 - 面板 `OnDestroy()` 时 `ClearSelectedNote()`
 - 面板 `Update()` 开始处发现选中 Unity 对象已销毁或 GameObject 失活时 `ClearStaleSelectedNote()`
 

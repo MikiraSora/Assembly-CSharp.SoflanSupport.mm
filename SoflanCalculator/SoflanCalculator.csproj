@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Compile Include="..\SoflanSupport\MaiBugAdjust.mm.cs" Link="MaiBugAdjust.mm.cs" />
+    <Compile Include="..\SoflanSupport\SoflanRuntimeTime.mm.cs" Link="SoflanRuntimeTime.mm.cs" />
     <Compile Include="..\SoflanSupport\SoflanMarkerParser.mm.cs" Link="SoflanMarkerParser.mm.cs" />
     <ProjectReference Include="..\Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core.NetFx472\SimpleSoflanFramework.Core.NetFx472.csproj">
       <Private>true</Private>

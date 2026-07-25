@@ -1,4 +1,6 @@
 using Manager;
+using MAI2.Util;
+using System;
 
 namespace SoflanSupport
 {
@@ -36,6 +38,30 @@ namespace SoflanSupport
                     visibleMsec,
                     Setting.EnableSoflanMaiBugAdjust)
                 : 0f;
+        }
+
+        public static float GetRuntimeChartOffsetMsec(int monitorId)
+        {
+            try
+            {
+                var runtimeChartOffsetMsec = Singleton<GamePlayManager>.Instance
+                    .GetGameScore(monitorId)
+                    .UserOption
+                    .GetAdjustMSec();
+                if (!float.IsNaN(runtimeChartOffsetMsec)
+                    && !float.IsInfinity(runtimeChartOffsetMsec))
+                    return runtimeChartOffsetMsec;
+
+                PatchLog.Error(
+                    $"invalid GetAdjustMSec for monitor {monitorId}: {runtimeChartOffsetMsec}");
+            }
+            catch (Exception exception)
+            {
+                PatchLog.Error(
+                    $"GetAdjustMSec failed for monitor {monitorId}: {exception.Message}");
+            }
+
+            return 0f;
         }
     }
 }

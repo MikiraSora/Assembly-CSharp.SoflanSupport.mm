@@ -9,23 +9,27 @@ namespace Manager
 {
     public class patch_NotesReader : NotesReader
     {
-        // loadMa2Main: calcBPMList 调用前 — 清空 soflan 状态 (对应 head 中 clearAll 调用)
-        public static void __SoflanClearAll()
+        // loadMa2Main: calcBPMList 调用前 — 只清空当前玩家的 soflan 状态
+        public static void __SoflanClearPlayer(int playerId)
         {
             SoflanPanelBehaviour.ClearSelectedNote();
-            Singleton<SoflanManager>.Instance.clearAll();
+            Singleton<SoflanManager>.Instance.clearPlayer(playerId);
         }
 
         // loadMa2Main: calcTotal 调用后 — 从谱面文件加载 soflan 区间 (对应 head 中 loadComposition 调用)
-        public static void __SoflanLoadComposition(MA2RecordList records, NotesReader sr)
+        public static void __SoflanLoadComposition(MA2RecordList records, NotesReader sr, int playerId)
         {
-            Singleton<SoflanManager>.Instance.loadComposition(records, sr);
+            Singleton<SoflanManager>.Instance.loadComposition(
+                records,
+                sr,
+                playerId,
+                SoflanVisualTiming.GetRuntimeChartOffsetMsec(playerId));
         }
 
         // loadNote: return 前 — 注册 note 的 soflan 分组 (对应 head 中 SoflanManager.loadNote 调用)
-        public static void __SoflanLoadNote(NoteData noteData, MA2Record rec, NotesReader sr)
+        public static void __SoflanLoadNote(NoteData noteData, MA2Record rec, NotesReader sr, int playerId)
         {
-            Singleton<SoflanManager>.Instance.loadNote(noteData, rec, sr);
+            Singleton<SoflanManager>.Instance.loadNote(noteData, rec, sr, playerId);
         }
     }
 }

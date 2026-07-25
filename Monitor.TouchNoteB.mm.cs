@@ -24,12 +24,19 @@ namespace Monitor
                 NoteKind = NotesTypeID.Def.TouchTap;
 
             touchSoflanManager = Singleton<SoflanManager>.Instance;
-            touchIsInSoflan = touchSoflanManager.containsSoflans() && noteKind == NotesTypeID.Def.TouchTap;
+            touchIsInSoflan = touchSoflanManager.containsSoflans(MonitorId)
+                && noteKind == NotesTypeID.Def.TouchTap;
             if (touchIsInSoflan)
             {
-                touchSoflanGroup = touchSoflanManager.getNoteSoflanGroup(NoteIndex);
-                var noteAudioMsec = touchSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
-                touchNoteSoflanTime = touchSoflanManager.ConvertAudioTimeToY_PreviewMode(noteAudioMsec, touchSoflanGroup);
+                touchSoflanGroup = touchSoflanManager.getNoteSoflanGroup(MonitorId, NoteIndex);
+                var noteAudioMsec = touchSoflanManager.getNoteAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    AppearMsec);
+                touchNoteSoflanTime = touchSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    noteAudioMsec,
+                    touchSoflanGroup);
             }
             else
             {
@@ -62,6 +69,7 @@ namespace Monitor
         private float GetTouchNoteYPositionSoflan()
         {
             float currentSoflanTime = touchSoflanManager.GetCurrentSoflanTimeCached(
+                MonitorId,
                 NotesManager.GetCurrentMsec(),
                 touchSoflanGroup);
             float touchDispTime = DefaultMsec * 0.25f;

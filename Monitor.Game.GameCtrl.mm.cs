@@ -15,34 +15,41 @@ namespace Monitor.Game
     public class SoflanGameCtrlHooks
     {
         // UpdateCtrl: UserOption 赋值后 — 清空 SoflanManager 的共享每帧 soflan 时间缓存
-        public void __SoflanClearCache()
+        public void __SoflanClearCache(int monitorIndex)
         {
-            Singleton<SoflanManager>.Instance.clearCurrentSoflanTimeCache();
+            Singleton<SoflanManager>.Instance.clearCurrentSoflanTimeCache(monitorIndex);
         }
 
         // UpdateCtrl: 原 msec 可见性检查前 — soflan 可见性判定
         // 返回 0 = 非 soflan(走原始 msec 检查), 1 = soflan 可见(处理, 跳过原始检查), 2 = soflan 不可见(continue)
-        public int __SoflanNoteDecision(NoteData note, float num)
+        public int __SoflanNoteDecision(NoteData note, float num, int monitorIndex)
         {
             var soflanManager = Singleton<SoflanManager>.Instance;
-            if (!soflanManager.containsSoflans())
+            if (!soflanManager.containsSoflans(monitorIndex))
                 return 0;
             if (!SoflanManager.IsSupportedVisualSoflanKind(note.type.getEnum()))
                 return 0;
 
             var currentMsec = NotesManager.GetCurrentMsec();
-            var noteSoflanGroup = soflanManager.getNoteSoflanGroup(note);
+            var noteSoflanGroup = soflanManager.getNoteSoflanGroup(monitorIndex, note);
             var visibleMsec = FixedSoflan.IsEnabledForNote(note)
                 ? FixedSoflan.GetVisibleMsec(FixedSoflan.GetUnifiedSpeed(note))
                 : num;
             var maiBugAdjustMsec = SoflanVisualTiming.GetMaiBugAdjustMsec(
                 note.type.getEnum(),
                 visibleMsec);
-            var soflanTime = soflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+            var soflanTime = soflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                monitorIndex,
                 currentMsec,
                 maiBugAdjustMsec,
                 noteSoflanGroup);
-            if (!soflanManager.checkNoteVisible(note, currentMsec, visibleMsec, noteSoflanGroup, soflanTime))
+            if (!soflanManager.checkNoteVisible(
+                    monitorIndex,
+                    note,
+                    currentMsec,
+                    visibleMsec,
+                    noteSoflanGroup,
+                    soflanTime))
                 return 2;
             return 1;
         }

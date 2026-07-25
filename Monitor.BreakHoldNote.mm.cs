@@ -24,14 +24,26 @@ namespace Monitor
             orig_Initialize(note);
 
             breakHoldSoflanManager = Singleton<SoflanManager>.Instance;
-            breakHoldIsInSoflan = breakHoldSoflanManager.containsSoflans();
+            breakHoldIsInSoflan = breakHoldSoflanManager.containsSoflans(MonitorId);
             if (breakHoldIsInSoflan)
             {
-                breakHoldSoflanGroup = breakHoldSoflanManager.getNoteSoflanGroup(NoteIndex);
-                var headAudioMsec = breakHoldSoflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
-                var tailAudioMsec = breakHoldSoflanManager.getNoteEndAudioMsecForSoflan(NoteIndex, TailMsec);
-                breakHoldHeadSoflanTime = breakHoldSoflanManager.ConvertAudioTimeToY_PreviewMode(headAudioMsec, breakHoldSoflanGroup);
-                breakHoldTailSoflanTime = breakHoldSoflanManager.ConvertAudioTimeToY_PreviewMode(tailAudioMsec, breakHoldSoflanGroup);
+                breakHoldSoflanGroup = breakHoldSoflanManager.getNoteSoflanGroup(MonitorId, NoteIndex);
+                var headAudioMsec = breakHoldSoflanManager.getNoteAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    AppearMsec);
+                var tailAudioMsec = breakHoldSoflanManager.getNoteEndAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    TailMsec);
+                breakHoldHeadSoflanTime = breakHoldSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    headAudioMsec,
+                    breakHoldSoflanGroup);
+                breakHoldTailSoflanTime = breakHoldSoflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    tailAudioMsec,
+                    breakHoldSoflanGroup);
             }
             else
             {
@@ -51,7 +63,8 @@ namespace Monitor
             if (breakHoldIsInSoflan && CheckSupportSoflan())
             {
                 float currentMsec = NotesManager.GetCurrentMsec();
-                float currentSoflanTime = breakHoldSoflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+                float currentSoflanTime = breakHoldSoflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                    MonitorId,
                     currentMsec,
                     breakHoldMaiBugAdjustMsec,
                     breakHoldSoflanGroup);
@@ -76,7 +89,8 @@ namespace Monitor
 
             if (breakHoldIsInSoflan && CheckSupportSoflan())
             {
-                float currentSoflanTime = breakHoldSoflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+                float currentSoflanTime = breakHoldSoflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                    MonitorId,
                     NotesManager.GetCurrentMsec(),
                     breakHoldMaiBugAdjustMsec,
                     breakHoldSoflanGroup);

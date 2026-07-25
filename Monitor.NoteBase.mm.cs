@@ -63,12 +63,18 @@ namespace Monitor
 
             //Soflan Support
             soflanManager = Singleton<SoflanManager>.Instance;
-            isInSoflan = soflanManager.containsSoflans();
+            isInSoflan = soflanManager.containsSoflans(MonitorId);
             if (isInSoflan)
             {
-                noteSoflanGroup = soflanManager.getNoteSoflanGroup(NoteIndex);
-                var noteAudioMsec = soflanManager.getNoteAudioMsecForSoflan(NoteIndex, AppearMsec);
-                noteSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(noteAudioMsec, noteSoflanGroup);
+                noteSoflanGroup = soflanManager.getNoteSoflanGroup(MonitorId, NoteIndex);
+                var noteAudioMsec = soflanManager.getNoteAudioMsecForSoflan(
+                    MonitorId,
+                    NoteIndex,
+                    AppearMsec);
+                noteSoflanTime = soflanManager.ConvertAudioTimeToY_PreviewMode(
+                    MonitorId,
+                    noteAudioMsec,
+                    noteSoflanGroup);
             }
             else
             {
@@ -145,12 +151,16 @@ namespace Monitor
 
         private float GetSoflanTimeDiff(float currentMsec)
         {
-            var currentSoflanTime = soflanManager.GetCurrentSoflanTimeWithAudioOffsetCached(
+            var currentSoflanTime = soflanManager.GetCurrentSoflanTimeWithOffsetsCached(
+                MonitorId,
                 currentMsec,
                 maiBugAdjustMsec,
                 noteSoflanGroup);
 #if DEBUG
-            _rawCurrentSoflanTime = soflanManager.GetCurrentSoflanTimeCached(currentMsec, noteSoflanGroup);
+            _rawCurrentSoflanTime = soflanManager.GetCurrentSoflanTimeCached(
+                MonitorId,
+                currentMsec,
+                noteSoflanGroup);
             _adjustedCurrentSoflanTime = currentSoflanTime;
 #endif
             return noteSoflanTime - currentSoflanTime;
@@ -321,7 +331,13 @@ namespace Monitor
                     FixedScaleProgress = fixedScaleProgress,
                     MaiBugAdjustEnabled = Setting.EnableSoflanMaiBugAdjust,
                     MaiBugAdjustMsec = maiBugAdjustMsec,
-                    MaiBugAdjustedAudioMsec = MaiBugAdjust.ApplyToAudioMsec(currentTime, maiBugAdjustMsec),
+                    MonitorId = MonitorId,
+                    RuntimeCurrentMsec = currentTime,
+                    RuntimeChartOffsetMsec = soflanManager.getRuntimeChartOffsetMsec(MonitorId),
+                    AdjustedRawCurrentMsec = SoflanRuntimeTime.ToRawChartAudioMsec(
+                        currentTime,
+                        soflanManager.getRuntimeChartOffsetMsec(MonitorId),
+                        maiBugAdjustMsec),
                     RawCurrentSoflanTime = _rawCurrentSoflanTime,
                     AdjustedCurrentSoflanTime = _adjustedCurrentSoflanTime,
                 };
