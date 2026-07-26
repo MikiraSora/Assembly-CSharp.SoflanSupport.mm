@@ -5,10 +5,10 @@ using SoflanSupport;
 
 var ma2Path = args.Length > 0
     ? args[0]
-    : @"F:\yourGame\Package\Sinmai_Data\StreamingAssets\yourOption\music\yourMusic\example_02.ma2";
+    : @"F:\SDEZ_165\Package\Sinmai_Data\StreamingAssets\A000\music\music003999\003999_02.ma2.bak_20260703023239";
 var majdataPath = args.Length > 1
     ? args[1]
-    : @"F:\yourGame\Package\Sinmai_Data\StreamingAssets\yourOption\music\yourMusic\example_02.ma2.majdata.txt";
+    : @"F:\SDEZ_165\Package\Sinmai_Data\StreamingAssets\A000\music\music003999\003999_02.ma2.bak_20260703023239.majdata.txt";
 var inoteIndex = args.Length > 2 ? int.Parse(args[2], CultureInfo.InvariantCulture) : 3;
 
 var ma2 = ReadMa2(ma2Path);

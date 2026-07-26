@@ -1,4 +1,4 @@
-// patch_Monitor.Game.GameCtrl — 对应脱敏 source snapshot 中 Monitor/Game/GameCtrl.cs 的改动.
+// patch_Monitor.Game.GameCtrl — 对应 head commit 2a7a4a4 中 Monitor/Game/GameCtrl.cs 的改动.
 // GameCtrl 仅有 private 0 参构造, 派生类无法链式调用; 且辅助方法无需访问 GameCtrl 基类成员,
 // 故用 [MonoModPatch] 显式指定目标且不继承 GameCtrl. MonoMod 仍将字段与辅助方法复制进 GameCtrl.
 // UpdateCtrl 的 soflan 可见性逻辑为方法体中间插入且改写既有 continue 控制流, orig_ 无法表达,

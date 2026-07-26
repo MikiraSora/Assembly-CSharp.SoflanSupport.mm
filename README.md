@@ -63,11 +63,10 @@ git submodule update --init --recursive
 构建 Release：
 
 ```powershell
-dotnet build -c Release .\Assembly-CSharp.SoflanSupport.mm.csproj `
-  -p:GameRoot='F:\yourGame'
+dotnet build -c Release .\Assembly-CSharp.SoflanSupport.mm.csproj
 ```
 
-`F:\yourGame` 是游戏根目录占位符，目录下应存在 `Package\Sinmai_Data\Managed` 和 `Package\BepInEx\core`。产物位于：
+主项目中的 `HintPath` 是本机绝对路径。构建前请按自己的游戏安装位置调整；本文统一用 `F:\yourGame` 表示游戏根目录，其下应存在 `Package\Sinmai_Data\Managed` 和 `Package\BepInEx\core`。产物位于：
 
 ```text
 bin\Release\Assembly-CSharp.SoflanSupport.mm.dll

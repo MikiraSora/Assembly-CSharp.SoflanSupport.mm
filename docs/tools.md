@@ -109,11 +109,10 @@ summary 记录元数据、resolution、BPM/SFL/note 数量、自动补的 reset 
 F:\yourMajdataEdit\MajSimaiX\MajSimai.csproj
 ```
 
-`F:\yourMajdataEdit` 是脱敏占位符。项目引用可通过 `MajSimaiProject` MSBuild 属性覆盖；运行时应显式提供参数：
+`F:\yourMajdataEdit` 是文档中的脱敏占位符。该工具项目当前使用本机绝对 `ProjectReference`；运行前请在自己的副本中把它改为实际的 `MajSimai.csproj` 路径，并显式提供参数：
 
 ```powershell
-dotnet run --project .\tools\MajdataValidation\MajdataValidation.csproj -c Release `
-  -p:MajSimaiProject='F:\yourMajdataEdit\MajSimaiX\MajSimai.csproj' -- `
+dotnet run --project .\tools\MajdataValidation\MajdataValidation.csproj -c Release -- `
   'D:\yourCharts\example_02.ma2' `
   'D:\yourCharts\example_02.majdata.txt' `
   3

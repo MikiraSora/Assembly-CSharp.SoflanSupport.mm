@@ -4,10 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <MajSimaiProject Condition="'$(MajSimaiProject)' == ''">F:\yourMajdataEdit\MajSimaiX\MajSimai.csproj</MajSimaiProject>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\SoflanSupport\SoflanMarkerParser.mm.cs" Link="SoflanMarkerParser.mm.cs" />
-    <ProjectReference Include="$(MajSimaiProject)" />
+    <ProjectReference Include="F:\MajdataEdit\MajSimaiX\MajSimai.csproj" />
   </ItemGroup>
 </Project>

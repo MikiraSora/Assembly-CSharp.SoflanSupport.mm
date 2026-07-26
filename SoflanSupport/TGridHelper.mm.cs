@@ -1,4 +1,4 @@
-// SoflanSupport.TGridHelper — 新增类型, verbatim 自脱敏 source snapshot.
+// SoflanSupport.TGridHelper — 新增类型, verbatim 自 head commit 2a7a4a4.
 using Manager;
 using OngekiFumenEditor.Core.Base;
 using System;

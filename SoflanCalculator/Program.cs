@@ -25,7 +25,7 @@ namespace SoflanCalculator
             if (args.Length < 3)
             {
                 Console.Error.WriteLine("用法: SoflanCalculator.exe <ma2文件路径> <物件行号(1-based)> <运行时当前时间msec> [GetAdjustMSec]");
-                Console.Error.WriteLine("示例: SoflanCalculator.exe \"D:\\yourCharts\\example.ma2\" 42 2560 60");
+                Console.Error.WriteLine("示例: SoflanCalculator.exe \"D:\\charts\\008.ma2\" 42 2560 60");
                 return 1;
             }
 

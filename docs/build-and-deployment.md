@@ -30,7 +30,7 @@ bin/Release/Assembly-CSharp.SoflanSupport.mm.pdb
 | `MonoMod.dll`、`MonoMod.Utils.dll` | `F:\yourGame\Package\BepInEx\core` |
 | `Mono.Cecil*.dll` | `F:\yourGame\Package\BepInEx\core` |
 
-`F:\yourGame` 是脱敏占位符。主项目通过 `GameRoot` MSBuild 属性生成所有 `HintPath`；本机构建时把它覆盖成实际游戏根目录，不需要修改项目文件。不要用不同大版本的 NuGet MonoMod 替换游戏自带版本；patch 当前针对 BepInEx 随附的经典 MonoMod `20.5.21.5` / Cecil `0.10.4` 形状构建。
+`F:\yourGame` 是文档中的脱敏占位符。主项目当前使用本机绝对 `HintPath`；如果游戏安装位置不同，需要先在自己的副本中把这些引用改为实际路径。不要用不同大版本的 NuGet MonoMod 替换游戏自带版本；patch 当前针对 BepInEx 随附的经典 MonoMod `20.5.21.5` / Cecil `0.10.4` 形状构建。
 
 初始化子模块：
 
@@ -43,8 +43,8 @@ git submodule update --init --recursive
 从仓库根目录直接构建主项目：
 
 ```powershell
-dotnet build -c Release .\Assembly-CSharp.SoflanSupport.mm.csproj -p:GameRoot='F:\yourGame'
-dotnet build -c Debug .\Assembly-CSharp.SoflanSupport.mm.csproj -p:GameRoot='F:\yourGame'
+dotnet build -c Release .\Assembly-CSharp.SoflanSupport.mm.csproj
+dotnet build -c Debug .\Assembly-CSharp.SoflanSupport.mm.csproj
 ```
 
 在当前引用形状下，Release 构建为 0 warning；Debug 构建可能报告 `MSB3270`，原因是 patch 输出为 MSIL，而引用的 `Assembly-CSharp.dll` 标记为 AMD64。当前构建仍会成功并生成 patch，但该提示不能代表运行时已经验证，部署前仍需完成 MonoMod 应用和游戏内检查。
@@ -115,8 +115,8 @@ Release 与 Debug 的运行时差异：
 推荐在部署前执行：
 
 ```powershell
-dotnet build -c Release .\Assembly-CSharp.SoflanSupport.mm.csproj -p:GameRoot='F:\yourGame'
-dotnet build -c Debug .\Assembly-CSharp.SoflanSupport.mm.csproj -p:GameRoot='F:\yourGame'
+dotnet build -c Release .\Assembly-CSharp.SoflanSupport.mm.csproj
+dotnet build -c Debug .\Assembly-CSharp.SoflanSupport.mm.csproj
 dotnet run --project .\tools\SoflanMarkerTests\SoflanMarkerTests.csproj -c Release
 dotnet run --project .\tools\SoflanLogTests\SoflanLogTests.csproj -c Release
 dotnet run --project .\tools\SoflanMaiBugTests\SoflanMaiBugTests.csproj -c Release

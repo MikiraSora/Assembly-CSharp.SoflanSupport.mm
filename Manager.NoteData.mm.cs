@@ -1,5 +1,5 @@
 #pragma warning disable CS0626
-// patch_Manager.NoteData — 对应脱敏 source snapshot 中 Manager/NoteData.cs 的改动.
+// patch_Manager.NoteData — 对应 head commit 2a7a4a4 中 Manager/NoteData.cs 的改动.
 // - 新增字段 noteSoflanTimeOpt (private)
 // - 新增字段 isFixedSoflanToUnifiedSpeed / fixedSoflanUnifiedSpeed
 // - clear() 末尾追加 noteSoflanTimeOpt = default (orig_ 包装)
