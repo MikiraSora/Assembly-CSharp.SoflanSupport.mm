@@ -1,31 +1,32 @@
 # Patch Diff Report
 
-- repo: `D:\sdez_165` (maimai 宴 Unity 工程)
-- diff: `3034ec1..2a7a4a4` (单提交 "done")
-- target assembly: `F:\SDEZ_165\Package\Sinmai_Data\Managed\Assembly-CSharp.dll` (net462)
-- model: **A (target ≡ base build)** — 验证: 目标 DLL 中不含任何 SoflanSupport 字符串 (`SoflanManager` / `GamePlayFumenController` / `checkNoteVisible` / `GetNoteYPosition_soflan` 均为 0 命中), 即目标程序集就是 `3034ec1` 的编译产物。
+> 文档状态：本文起源于早期移植验证，保留目标程序集与 IL 选择记录。当前版本已经把 `SimpleSoflanFramework.Core` 通过 Shared Project 内嵌进 `.mm.dll`，并删除 `DependencyAssemblyResolver`；构建、部署和完整接入点以 [`docs/build-and-deployment.md`](docs/build-and-deployment.md) 为准。
+
+- repo: `D:\yourGameSource`（目标 Unity 工程，路径已脱敏）
+- diff: `<base-commit>..<soflan-source-commit>`（私有源仓库提交标识已脱敏）
+- target assembly: `F:\yourGame\Package\Sinmai_Data\Managed\Assembly-CSharp.dll` (net462)
+- model: **A (target ≡ base build)** — 验证: 目标 DLL 中不含任何 SoflanSupport 字符串 (`SoflanManager` / `GamePlayFumenController` / `checkNoteVisible` / `GetNoteYPosition_soflan` 均为 0 命中), 即目标程序集就是 `<base-commit>` 对应的编译产物。
 
 ## 外部依赖
 
-新增的 `SoflanSupport/*` 类型引用外部程序集 **`SimpleSoflanFramework.Core.dll`**, 它提供 `OngekiFumenEditor.Core.*` 命名空间 (`TGrid` / `TGridCalculator` / `Soflan` / `SoflanList` / `SoflanListMap` / `BpmList` / `BPMChange` / `MathUtils` 等)。该 DLL 位于:
-`Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core\bin\Debug\SimpleSoflanFramework.Core.dll`
+当前 `SoflanSupport/*` 使用的 `OngekiFumenEditor.Core.*` 类型来自 `Dependencies/SimpleSoflanFramework` 子模块。主项目导入 `SimpleSoflanFramework.Core.projitems`，把这些源码直接编入 `Assembly-CSharp.SoflanSupport.mm.dll`。
 
-**运行时部署要求 (resolver 方案)**: 修补后的 `Assembly-CSharp` 注入了引用 `OngekiFumenEditor.Core.*` 的新类型, 但 `BepInEx/monomod/` 只是 patch 输入目录、非运行时探测路径, 故运行时首次触碰注入类型会因找不到 `SimpleSoflanFramework.Core` 而 `TypeLoadException`。为此 patch 内置运行时依赖解析器 `SoflanSupport.DependencyAssemblyResolver` (普通新类型, 整体复制进 target): 挂 `AppDomain.AssemblyResolve`, 仅对白名单 `{SimpleSoflanFramework.Core}` 从 ① resolver 自身目录 ② `BepInEx/monomod/` 加载。Mount 由 `MonoModRules` 在 4 个目标方法 (`loadMa2Main`/`loadNote`/`UpdateCtrl`/`OnUpdate`) 起始注入 `call Register()` (幂等), 保证在首次引用任何注入类型之前挂载; **不使用** `[RuntimeInitializeOnLoadMethod]` (BepInEx 修补后的程序集不触发)。因此只需将 `SimpleSoflanFramework.Core.dll` 与 `.mm.dll` 同放 `BepInEx/monomod/`, 无需复制到 `Sinmai_Data\Managed\`。`SimpleSoflanFramework.Core` 仅引用 mscorlib/System/System.Core, 无第三方传递依赖。
+因此当前运行时没有 `SimpleSoflanFramework.Core.dll` AssemblyRef，也不再注册 `AppDomain.AssemblyResolve`。部署只需要 `.mm.dll`，不需要向 `BepInEx/monomod/` 或 `Sinmai_Data/Managed/` 复制独立 Core DLL。
 
 ## 生成产物
 
-- patch 项目: `D:\sdez165_soflan_support\Assembly-CSharp.SoflanSupport.mm.csproj` (TFM **net472**)
+- patch 项目: `D:\yourSoflanSupport\Assembly-CSharp.SoflanSupport.mm.csproj` (TFM **net472**)
 - patch 程序集: `bin\Release\Assembly-CSharp.SoflanSupport.mm.dll` (输出整洁: 仅 .mm.dll + .pdb)
 - 修补产物 (staging 验证用): `staging\Assembly-CSharp_modded.dll`
-- IL 检视/应用工具: `D:\sdez165_soflan_support_tools\{IlInspect,Patcher}` (与 patch 项目分离, 避免其 bin 产物干扰 patch 引用解析)
+- IL 检视/应用工具: `D:\yourSoflanTools\{IlInspect,Patcher}` (与 patch 项目分离, 避免其 bin 产物干扰 patch 引用解析)
 
 ### MonoMod 引用源
 
-patch 项目引用 **BepInEx 随附的经典 MonoMod** (`F:\SDEZ_165\Package\BepInEx\core\MonoMod.dll`, v20.5.21.5), 而非 NuGet `MonoMod.Patcher 25.0.1`。理由:
+patch 项目引用 **BepInEx 随附的经典 MonoMod** (`F:\yourGame\Package\BepInEx\core\MonoMod.dll`, v20.5.21.5), 而非 NuGet `MonoMod.Patcher 25.0.1`。理由:
 - 与游戏运行时一致: BepInEx 环境下 patcher 用的是这个旧版 MonoMod。若 .mm.dll 编译时引用 NuGet 25.0.1 (`MonoMod v25.0.1`), 运行时 patcher 是 `v20.5.21.5`, 会产生 MonoMod AssemblyRef 版本错配。
 - 避免 NuGet 25.0.1 引入的 `MonoMod.Backports` / `MonoMod.ILHelpers` 等新架构传递依赖 (用户明确不想要)。
 
-`.mm.dll` 的 AssemblyRef (已验证干净): `MonoMod v20.5.21.5`, `Mono.Cecil v0.10.4.0`, `mscorlib v4.0.0.0`, `Assembly-CSharp`, `SimpleSoflanFramework.Core`, `UnityEngine.CoreModule`, `System.Core` — **无 netstandard**, 无 Backports/Utils/ILHelpers。
+`.mm.dll` 仍以游戏随附的 `MonoMod v20.5.21.5` 和 `Mono.Cecil v0.10.4.0` 为编译目标；当前 Core 源码内嵌，不应再出现 `SimpleSoflanFramework.Core` 外部引用。
 
 > TFM 选 net472 而非 net462: BepInEx 的 `Mono.Cecil.dll` 0.10.4 是 netstandard2.0 编译, 其类型签名引用 `netstandard.dll`; net462 不自带 netstandard facade (net472 才自带)。net472 编译会把 Cecil 的 `netstandard::Object` unify 到 `mscorlib`, 使 .mm.dll 不引入 netstandard 引用 (游戏 Managed 目录无 netstandard.dll, 不能引入)。.mm.dll 仍引用 mscorlib v4.0.0.0, 与 net462 Unity 运行时兼容。
 
@@ -78,7 +79,7 @@ patch 项目引用 **BepInEx 随附的经典 MonoMod** (`F:\SDEZ_165\Package\Bep
 
 | source file | change | 原因 |
 |---|---|---|
-| Assembly-CSharp.csproj | 新增 `ProjectReference` SimpleSoflanFramework + PostBuild 改 xcopy | 构建接线, 非 IL; 运行时依赖改为手动部署 DLL |
+| `Assembly-CSharp.SoflanSupport.mm.csproj` | 导入 SimpleSoflanFramework Shared Project | 构建接线，非 IL；Core 源码直接内嵌进 patch |
 | Monitor/Game/GameCtrl.cs, Monitor/NoteBase.cs, Manager/NotesReader.cs 等 | 大量空白/缩进重排 | `git diff -w` 后非实质性变更, 无需 patch |
 
 ## 验证结果
@@ -93,9 +94,9 @@ patch 项目引用 **BepInEx 随附的经典 MonoMod** (`F:\SDEZ_165\Package\Bep
 
 ## 应用方式
 
-将 `Assembly-CSharp.SoflanSupport.mm.dll` 与 `SimpleSoflanFramework.Core.dll` 同放 `BepInEx\monomod\`。BepInEx 的 MonoMod.Loader 在游戏启动时自动应用 `.mm.dll`, 运行时由内置 `DependencyAssemblyResolver` 从 `monomod/` 加载 `SimpleSoflanFramework.Core` (见上「外部依赖」), 无需向 `Sinmai_Data\Managed\` 复制任何依赖。
+将 `Assembly-CSharp.SoflanSupport.mm.dll` 放入 `BepInEx\monomod\`。BepInEx 的 MonoMod.Loader 在游戏启动时自动应用 `.mm.dll`；不要再部署旧版 `SimpleSoflanFramework.Core.dll`。
 
-离线验证 (本报告所用): 用 BepInEx 随附的经典 MonoMod 应用 (验证脚本 `D:\sdez165_soflan_support_tools\Patcher`):
+离线验证 (本报告所用): 用 BepInEx 随附的经典 MonoMod 应用 (验证脚本 `D:\yourSoflanTools\Patcher`):
 ```
 # 经典 MonoModder API (v20.5.21.5): Read -> ReadMod -> MapDependencies -> AutoPatch -> Write
 # 等价 CLI (若环境提供): MonoMod.Patcher.exe Assembly-CSharp.dll Assembly-CSharp.SoflanSupport.mm.dll Assembly-CSharp_modded.dll
@@ -104,6 +105,6 @@ patch 项目引用 **BepInEx 随附的经典 MonoMod** (`F:\SDEZ_165\Package\Bep
 ```
 （若目标目录含 `Assembly-CSharp.pdb`, PDB 写入器对 IL 修改后的局部作用域可能报错; 应用前移除目标 `.pdb` 或用无符号模式。）
 
-也可用 `Assembly-CSharp_modded.dll` 替换原 `Assembly-CSharp.dll` 直接运行 (此时 resolver 的候选 ② `monomod/` 仍命中依赖, 因 `Application.dataPath` 推导的 gameRoot 下有 `BepInEx/monomod/`)。
+离线生成的 `Assembly-CSharp_modded.dll` 只用于结构化验证；直接替换游戏程序集前必须自行备份并确认目标版本一致。
 
 > 注: 本报告及 patch 均为离线结构化验证 (Cecil 静态校验 + IL 语义核对), 未在游戏进程中实跑。运行时行为(尤其 soflan 可见性数值与 NoteBase 缩放/Y 位置计算)需在游戏内进一步验证。

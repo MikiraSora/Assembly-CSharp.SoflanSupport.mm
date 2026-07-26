@@ -1,4 +1,4 @@
-// SoflanSupport.Setting — 新增类型, 基于 head commit 2a7a4a4 并扩展 Soflan 配置项.
+// SoflanSupport.Setting — 新增类型, 基于脱敏 source snapshot 并扩展 Soflan 配置项.
 // MonoMod 将该类型整体复制进目标程序集 Assembly-CSharp.
 using MAI2System;
 using System;

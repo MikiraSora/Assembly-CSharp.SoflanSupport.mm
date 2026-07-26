@@ -1,4 +1,4 @@
-// patch_Manager.NotesReader — 对应 head commit 2a7a4a4 中 Manager/NotesReader.cs 的改动.
+// patch_Manager.NotesReader — 对应脱敏 source snapshot 中 Manager/NotesReader.cs 的改动.
 // 由于 loadMa2Main 的 clearAll 为方法体中间插入、loadNote 末尾插入需访问 noteData 局部,
 // orig_ 包装无法表达, 改用 MonoModRules PostProcessor 做 IL 精确插入, 调用以下静态辅助方法.
 // 这些辅助方法会被 MonoMod 复制进目标 NotesReader 类型.

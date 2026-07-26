@@ -1,5 +1,5 @@
 param(
-    [string]$InputPath = 'F:\SDEZ_165\Package\Sinmai_Data\StreamingAssets\A000\music\music003999\003999_02.ma2.bak_20260703023239',
+    [string]$InputPath = 'F:\yourGame\Package\Sinmai_Data\StreamingAssets\yourOption\music\yourMusic\example_02.ma2',
     [string]$OutputPath = '',
     [string]$MusicXmlPath = '',
     [int]$InoteIndex = 0

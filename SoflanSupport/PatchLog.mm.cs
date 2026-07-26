@@ -1,4 +1,4 @@
-// SoflanSupport.PatchLog — 新增类型, verbatim 自 head commit 2a7a4a4.
+// SoflanSupport.PatchLog — 新增类型, verbatim 自脱敏 source snapshot.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

@@ -1,5 +1,7 @@
 # GC 暂停前提下的内存风险复查
 
+> 文档状态：这是指定版本的内存风险快照。当前版本已把 SimpleSoflanFramework 源码内嵌到 `.mm.dll` 并删除 `DependencyAssemblyResolver`，所以原 R-009 已消除。当前功能和部署要求见 [文档索引](README.md)。
+
 范围: 当前 patch 运行时代码与最近新增的 `Monitor.BreakNote.mm.cs`。`SoflanCalculator/` 已在 csproj 中排除, 属于离线工具, 不计入游戏运行期风险。
 
 前提: 游戏播放过程中 GC 暂停。因此即使某些对象不是传统意义上的“泄漏”, 只要在播放热路径持续分配, 也会在一首歌内累积到 GC 恢复后才释放, 表现为播放期间内存持续上升或结算/切场景时 GC 抖动。
@@ -178,22 +180,11 @@ var visibleRanges = soflanList.Value
 - 发布环境不挂载面板, 或用配置控制是否创建。
 - 如果保留, 需要确保 R-002/R-003 被处理。
 
-### R-009 DependencyAssemblyResolver 事件订阅为 AppDomain 生命周期
+### R-009 DependencyAssemblyResolver 事件订阅为 AppDomain 生命周期（已消除）
 
-位置:
-- `SoflanSupport/DependencyAssemblyResolver.mm.cs:43`
-- `SoflanSupport/DependencyAssemblyResolver.mm.cs:47`
-- `SoflanSupport/DependencyAssemblyResolver.mm.cs:64`
+原评审版本通过 `DependencyAssemblyResolver` 加载外部 `SimpleSoflanFramework.Core.dll`，因此存在 AppDomain 生命周期的 `AssemblyResolve` 订阅。当前版本以 Shared Project 把 Core 源码直接编入 `.mm.dll`，对应 resolver 文件、注册注入和事件订阅都已删除。
 
-现象:
-`Register()` 通过 `_registered` 防止重复订阅 `AssemblyResolve`。订阅后 handler 与静态字段存活到 AppDomain 结束。
-
-影响:
-正常游戏进程中这是预期生命周期, 不属于泄漏。若存在热重载/多次加载不同补丁程序集的环境, 才可能累积旧程序集引用。
-
-建议:
-- 普通 BepInEx/MonoMod 启动模式无需处理。
-- 若后续支持热重载, 需要提供反注册路径。
+该项不再构成当前运行时内存风险；部署时也不再需要外部 Core DLL。
 
 ### R-010 `BreakNote` soflan patch 未引入额外泄漏点
 
@@ -216,10 +207,10 @@ var visibleRanges = soflanList.Value
 
 以下代码会分配, 但主要发生在谱面加载、补丁应用或用户操作阶段, 不属于播放中每帧风险:
 
-- `SoflanSupport/SoflanManager.mm.cs:72`: `File.ReadAllLines(filePath)` 读取谱面文件。
-- `SoflanSupport/SoflanManager.mm.cs:76`: `Split()` / `Select()` / `ToArray()` 解析 SFL 行。
-- `SoflanSupport/SoflanManager.mm.cs:47`: `AsEnumerable().Reverse()` 用于读取 note soflan group。
-- `SoflanSupport/DependencyAssemblyResolver.mm.cs:152`: resolver 注册时创建搜索目录数组。
+- `SoflanManager.loadComposition()` 使用 `File.ReadLines()` 流式读取谱面，并用 `GetTabField()` 手工取得 SFL 字段。
+- `SoflanManager.loadNote()` 通过编译后的正则解析 marker，并在加载期登记 note group、头 TGrid 和尾 TGrid。
+- DEBUG 构建的面板挂载、Collider2D 添加、右键排序和剪贴板文本构造会在对应用户操作阶段分配。
+- 旧版 `DependencyAssemblyResolver` 的搜索目录数组分配已随 resolver 删除。
 - `MonoModRules.cs`: 只在 patch 应用期运行, 不进入游戏运行热路径。
 
 ## 优先级建议

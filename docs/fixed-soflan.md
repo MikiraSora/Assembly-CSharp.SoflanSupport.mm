@@ -1,5 +1,7 @@
 # FixedSoflan 设计与使用说明
 
+本文描述当前 FixedSoflan 运行时规范。普通 group、SFL 和支持矩阵见 [Soflan 变速系统](soflan-system.md)，配置与面板见 [配置、日志与调试](configuration-and-debugging.md)。
+
 ## 目标
 
 FixedSoflan 是 Soflan 支持里的一个按物件声明的视觉固定速度模式。
@@ -20,6 +22,8 @@ Soflan 组声明仍使用 `#groupFspeed` marker。FixedSoflan 在原有组号后
 | `#1F` | 使用 Soflan group `1`，启用 FixedSoflan，固定速度 `600` |
 | `#1F600` | 使用 Soflan group `1`，启用 FixedSoflan，固定速度 `600` |
 | `#1F750.5` | 使用 Soflan group `1`，启用 FixedSoflan，固定速度 `750.5` |
+| `#-2F750.5` | 使用 Soflan group `-2`，启用 FixedSoflan，固定速度 `750.5` |
+| `#+12F1e3` | 使用 Soflan group `12`，启用 FixedSoflan，固定速度 `1000` |
 | `#F` | 使用 Soflan group `0`，启用 FixedSoflan，固定速度 `600` |
 | `#F600` | 使用 Soflan group `0`，启用 FixedSoflan，固定速度 `600` |
 | `#0F600` | 使用 Soflan group `0`，启用 FixedSoflan，固定速度 `600` |
@@ -27,9 +31,10 @@ Soflan 组声明仍使用 `#groupFspeed` marker。FixedSoflan 在原有组号后
 说明：
 
 - `F` 和 `f` 都支持。
+- group 是 invariant-culture 的有符号十进制 `int`；正号、负号都合法，但必须与 MA2 `SFL` 的 group 一致。
 - `F` 前面的组号为空时，组号按 `0` 处理。
 - `F` 后面的速度为空时，速度按 `FixedSoflan.DefaultUnifiedSpeed`，也就是 `600` 处理。
-- 速度使用 invariant culture 浮点解析，必须是正数。
+- 速度使用 invariant culture 浮点解析，支持小数和科学计数法，最终值必须是正的有限数。
 - marker 是按物件声明的，不是全局配置。
 - marker 不会自动继承或扩散给其它物件、child note、slide child 或 each 中的其它 note。
 
@@ -40,6 +45,8 @@ Soflan 组声明仍使用 `#groupFspeed` marker。FixedSoflan 在原有组号后
 #219F
 #219F600
 #219F750.5
+#-2F750.5
+#+12F1e3
 !m#219F600!y
 #219F600!y!m
 ```
@@ -55,7 +62,7 @@ Soflan 组声明仍使用 `#groupFspeed` marker。FixedSoflan 在原有组号后
 - 同一个 note record 中出现多个 Soflan marker。
 - marker 为空，例如 `#`。
 - marker 内部存在空白，例如 `# 1`、`#1 F`、`#1F 600`。
-- 组号不是整数，例如 `#A`、`#AF600`。
+- 组号不是整数或超出 `int` 范围，例如 `#A`、`#AF600`、`#2147483648`。
 - 固定速度不是正数，例如 `#1F0`、`#1F-600`、`#1FNaN`、`#1FInfinity`。
 
 当前实现选择“写日志并抛异常”，而不是静默降级。这样谱面语法错误会在加载阶段暴露，避免运行时表现变成难以定位的普通 Soflan。
@@ -315,6 +322,8 @@ dotnet build -c Release Assembly-CSharp.SoflanSupport.mm.csproj
 dotnet build -c Debug Assembly-CSharp.SoflanSupport.mm.csproj
 dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release
 ```
+
+`SoflanCalculator` 当前只按 marker 取得 group，不模拟 FixedSoflan 的声明速度；Fixed 数值应使用上述自动测试和 Debug 面板核对。工具详情见 [离线工具与验证](tools.md)。
 
 静态结构检查：
 

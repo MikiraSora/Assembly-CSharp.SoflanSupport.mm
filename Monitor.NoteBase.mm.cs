@@ -1,5 +1,5 @@
 #pragma warning disable CS0626
-// patch_Monitor.NoteBase — 对应 head commit 2a7a4a4 中 Monitor/NoteBase.cs 的改动.
+// patch_Monitor.NoteBase — 对应脱敏 source snapshot 中 Monitor/NoteBase.cs 的改动.
 // 所有被访问的 NoteBase 成员均为 protected, patch_NoteBase : NoteBase 可直接访问, 无需公开化.
 // 改动:
 // - 新增字段 soflanManager / isInSoflan / noteSoflanTime (在 Initialize 中赋值)

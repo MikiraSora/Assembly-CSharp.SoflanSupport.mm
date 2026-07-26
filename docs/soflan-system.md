@@ -1,12 +1,14 @@
 # Soflan 变速系统说明
 
+本文是当前运行时行为的规范说明。构建部署见 [构建与部署](build-and-deployment.md)，配置、日志、暂停快捷键和 DEBUG 面板见 [配置、日志与调试](configuration-and-debugging.md)，仓库功能入口见 [文档索引](README.md)。
+
 ## 定位
 
 本项目的 Soflan 支持是一个 MonoMod patch。它把 MA2 谱面里的变速区间读入 `SoflanManager`，再在游戏播放时用 Soflan 时间轴驱动物件的可见性和视觉位置。
 
 这里的 Soflan 指“视觉时间轴变速”，不是改变音频播放速度，也不是改变判定时间。判定仍按原始音频时间执行；Soflan 只改变物件何时出现、如何移动、如何缩放，以及某些类型的原版动画时间轴。
 
-当前实现依赖 `SimpleSoflanFramework.Core`：
+当前实现使用 `SimpleSoflanFramework.Core` 的源码；它通过 Shared Project 直接编入 patch `.mm.dll`，运行时不需要额外部署 Core DLL：
 
 - `SoflanListMap` 按 group 管理多条 Soflan 区间。
 - `BpmList` 管理谱面 BPM 变化。
@@ -17,7 +19,7 @@
 当前变速系统提供以下能力：
 
 - 从 MA2 文件读取 `SFL` 行，建立 Soflan 变速区间。
-- 从 note record 读取 `#N` marker，把单个物件挂到 Soflan group。
+- 从 note record 读取 `#group` marker，把单个物件挂到 Soflan group；group 支持有符号 `int`。
 - 支持每个物件独立选择 group，未声明时默认 group `0`。
 - 播放时按当前音频时间计算当前 Soflan 时间。
 - 在 `GameCtrl.UpdateCtrl` 的物件注册前替换可见性判断，让反向、停车、弹跳等变速下的物件可以正常被创建。
@@ -26,6 +28,7 @@
 - 对 TouchNoteB / TouchNoteC 使用 Soflan 时间轴驱动原版 Touch 显示动画。
 - 提供 DEBUG 调试面板，显示当前 group 速度、选中 Tap 的 Soflan 计算数据。
 - 支持 FixedSoflan 扩展，使指定 Tap 系物件按固定视觉速度计算进度，避免玩家物件速度影响弹跳表现。
+- 提供 Release/Debug 都可用的 `P` 键暂停/恢复，并在 NoteGuide 回池时清除 each guide 残留。这两项运维行为不依赖谱面是否含 SFL。
 
 ## mai2.ini 开关
 
@@ -33,9 +36,11 @@
 
 ```ini
 [Patches]
+EnablePatchLog=1
 EnableSoflanMaiBugAdjust=1
 ```
 
+- `EnablePatchLog` 只控制 Debug INFO 日志；ERROR 在 Release/Debug 中都不受它控制。
 - 配置缺失时默认启用。
 - `1` 表示启用，`0` 表示关闭；游戏的 `IniFile` 按整数读取该布尔项。
 - 配置在游戏启动后首次使用 Soflan 视觉时读取一次；修改后需要重启游戏。
@@ -43,6 +48,8 @@ EnableSoflanMaiBugAdjust=1
 - 关闭时，上述物件和 `GameCtrl` 可见性注册统一使用 `0ms` 偏移；Touch 原本就不使用该偏移，因此不受开关影响。
 - 无论开关状态如何，运行时当前时间都会先减去该玩家快照的 `GetAdjustMSec()`；该基础时间轴转换不属于 MaiBug 开关。
 - 该开关只改变 Soflan 视觉显示，不改变音频时间、判定时间或原版无 SFL 谱面的逻辑。
+
+完整开关、日志级别和读取时机见 [配置、日志与调试](configuration-and-debugging.md#mai2ini)。
 
 ## MA2 命令支持
 
@@ -53,7 +60,7 @@ EnableSoflanMaiBugAdjust=1
 当前解析格式按 tab 字段读取：
 
 ```text
-SFL    grid    unit    length    speed    group
+SFL    unit    grid    length    speed    group
 ```
 
 字段含义：
@@ -61,8 +68,8 @@ SFL    grid    unit    length    speed    group
 | 字段 | 位置 | 含义 |
 | --- | ---: | --- |
 | `SFL` | 0 | 行类型，大小写不敏感 |
-| `grid` | 1 | 起点 TGrid 的 grid |
-| `unit` | 2 | 起点 TGrid 的 unit |
+| `unit` | 1 | 起点 TGrid 的 unit；MA2 中通常表示 bar |
+| `grid` | 2 | 起点 TGrid 的 bar 内 grid |
 | `length` | 3 | 持续长度，作为 `GridOffset(0, length)` 加到起点 |
 | `speed` | 4 | 变速倍率 |
 | `group` | 5 | Soflan group，可空；为空时使用 group `0` |
@@ -72,7 +79,7 @@ SFL    grid    unit    length    speed    group
 ```csharp
 new Soflan
 {
-    TGrid = new TGrid(grid, unit),
+    TGrid = new TGrid(unit, grid),
     EndTGrid = TGrid + new GridOffset(0, length),
     Speed = speed,
     SoflanGroup = groupOrZero
@@ -82,7 +89,9 @@ new Soflan
 说明：
 
 - `speed` 是倍率，不是玩家物件速度。例如 `1.0` 表示正常视觉速度，`0` 表示停车，负数表示视觉时间轴反向。
+- `group` 由 `int.Parse()` 读取，可使用有符号 32 位整数；空字段才回退为 `0`。
 - 当前代码使用 `float.Parse()` 和 `int.Parse()` 解析字段；字段非法时该行解析失败。
+- loader 不额外校验 length、speed 的有限性或区间合理性。`0` 和负 speed 是合法功能，但谱面作者仍应避免 NaN、Infinity、无效负 length 等可被基础 parser 接受却没有可靠视觉语义的数据。
 - `SFL` 解析失败时会写日志 `parse soflan failed` 并停止继续读取后续 `SFL` 行。
 - 当前 loader 只直接消费 MA2 的 `SFL` 行，不直接解析 MajSimai 的 `<HS...>` 命令。
 
@@ -96,6 +105,8 @@ note record 中可以加入 `#groupFspeed` marker，把该物件挂到 Soflan gr
 #0
 #1
 #219
+#+12
+#-2
 !m#1
 #1!m!y
 !y!m#1
@@ -104,9 +115,11 @@ note record 中可以加入 `#groupFspeed` marker，把该物件挂到 Soflan gr
 含义：
 
 - `#1` 表示该 note 使用 Soflan group `1`。
+- group 语法是 invariant-culture 的有符号十进制 `int`，所以 `#+12` 和 `#-2` 也会被运行时接受；谱面中的 `SFL` group 必须使用同一数值才能对应。
 - 未写 marker 的 note 使用 group `0`。
 - 同一个 note record 只能匹配到一个 Soflan marker。
 - `!m`、`!y` 等以 `!` 开头的私有修饰可出现在 Soflan token 前后，不会成为 group 或 fixed speed 的一部分。
+- marker 必须是连续 token；空白、第二个 `#` 或粘连的普通字符都会使格式校验失败。
 
 当前 marker 是本 patch 的扩展语法。它由共享 `SoflanMarkerParser` 对 `record._str` 执行 `Regex.Matches()` 得到，运行时、`SoflanCalculator` 和 `MajdataValidation` 使用同一解析器；这不是原版游戏公开 API。
 
@@ -119,6 +132,7 @@ FixedSoflan 在 group marker 后追加 `F` 或 `f`：
 #1F600
 #F
 #F750
+#-2F750.5
 ```
 
 简要含义：
@@ -145,7 +159,7 @@ MajdataEdit / MajSimaiX 支持未定义组号语法 `<HS?*speed>(...)`。该语�
 
 - 每个 `<HS?*...>(...)` 都定义一个新的独立变速组。
 - 解析器内部用负数组号 `-1, -2, ...` 表示这些组，编辑器频谱标签显示为 `[?]`。
-- 导出 MA2 时才分配最终正数组号；运行时只会看到普通正整数 group。
+- 导出 MA2 时才分配最终正数组号，因此正常导出结果通常是正整数 group；运行时 parser 本身仍接受有符号 group。
 - 分配规则为：设显式手动组号最大值为 `M`，自动组从 `10^(M 的十进制位数)` 开始；若没有显式非 0 组号，则从 `10` 开始。
 - 多个自动组按首次出现顺序依次分配，例如显式最大组号为 `122` 时，自动组导出为 `1000`、`1001`、`1002` ...
 - 自动组内的 FixedSoflan 物件也会随映射导出，例如 `<HS?*1.5>(4@600)` 可能导出为 `#10F600`。
@@ -504,18 +518,18 @@ y = Lerp(StartPos, outsideY, motionProgress)
 | --- | --- | --- | --- |
 | MA2 `SFL` duration 行 | 支持 | 不适用 | 直接解析为 `Soflan` 区间 |
 | MA2 BPM 变化 | 支持 | 支持 | 从 composition BPM 列表读入 |
-| note `#N` group marker | 支持 | 不适用 | 本 patch 扩展 |
-| note `#NF` / `#NF600` | 支持 group | 支持 Tap 系 | 本 patch 扩展 |
+| note `#group` group marker | 支持 | 不适用 | 本 patch 扩展；group 是有符号 `int` |
+| note `#groupF` / `#groupF600` | 支持 group | 支持 Tap 系 | 本 patch 扩展 |
 | Tap | 支持 | 支持 |
 | Break | 支持 | 支持 |
 | ExTap / ExBreakTap | 支持 | 支持 |
 | Star / BreakStar / ExStar / ExBreakStar | 支持 | 支持位置和缩放，不单独改旋转 |
-| Hold | 支持 | 不支持 |
-| BreakHold | 支持 | 不支持 |
+| Hold / ExHold | 支持 | 不支持 |
+| BreakHold / ExBreakHold | 支持 | 不支持 |
 | TouchNoteB | 支持 | 不支持 |
 | TouchNoteC | 支持 | 不支持 |
 | TouchHoldC | 不支持本次 TouchTap 逻辑 | 不支持 |
-| Slide | 未专门支持 | 不支持 |
+| Slide 路径及内部星标 | 未专门支持 | 不支持 | 设计记录不代表已经实现 |
 | MajSimai `<HS...>` 文本 | 不直接支持 | 不直接支持 | 需要上游转换为 MA2 `SFL` |
 | SimpleSoflan `InterpolatableSoflan` | 框架支持 | 不适用 | 当前 MA2 loader 不直接生成 |
 | SimpleSoflan `KeyframeSoflan` | 框架支持 | 不适用 | 当前 MA2 loader 不直接读取独立 keyframe 命令 |
@@ -538,6 +552,7 @@ note marker 解析更严格：
 
 - 多个 `#...` marker 会写日志并抛 `FormatException`。
 - 空 marker、内部空白、非法 group、非法 FixedSoflan speed 都会写日志并抛 `FormatException`。
+- group 必须落在有符号 32 位整数范围内；正号和负号本身合法。
 - `#1!m!y`、`!y!m#1`、`!m#1F600!y` 等排列会先由正则抽出连续的 `#1` 或 `#1F600`，其他私有修饰保持独立。
 - marker 与 SFL 格式错误使用 Release 无条件 `PatchLog.Error`，后台写入 UTF-8 without BOM 的 `dpSoflanSupport.log` 并尝试转发 Unity Error；普通 INFO 日志仍只在 Debug 且受配置开关控制。
 
@@ -569,6 +584,8 @@ DEBUG 构建会挂载 Soflan Monitor 面板。
 - 选中 Tap 会显示 monitor、运行时钟、基础偏移、MaiBug、最终 MA2 原始轴时间以及原始/偏移后 Soflan 时间。
 - 面板顶部及选中 Tap 数据会显示 `MaiBugAdjust: Enabled/Disabled`，用于确认 `mai2.ini` 开关是否生效。
 
+面板默认位于右上角、约每 0.2 秒刷新；未选择 note 时显示 monitor `0`。`P` 键暂停/恢复在 Release 和 Debug 中都存在。完整交互、日志和限制见 [配置、日志与调试](configuration-and-debugging.md)。
+
 建议验证：
 
 - 无 `SFL` 谱面：所有物件保持原版行为。
@@ -595,8 +612,8 @@ dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release
 
 # 可选真实谱面对比：复杂变速轨迹 + 无 SFL/恒定 1x 全阶段视觉对照
 dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release -- `
-  "F:\SDEZ_165\Package\option\M501\music\music016800\016800_04.ma2" `
-  "F:\SDEZ_165\Package\option\M501\music\music016800\016800_01.ma2"
+  "F:\yourGame\Package\option\yourOption\music\yourMusic\example_04.ma2" `
+  "F:\yourGame\Package\option\yourOption\music\yourMusic\example_01.ma2"
 ```
 
 静态 patch 验证建议：
@@ -610,3 +627,5 @@ dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release
 - `HoldNote.Execute` / `BreakHoldNote.Execute` 存在 Soflan visual 分支。
 - `TouchNoteB.GetNoteYPosition` 存在 Soflan 分支。
 - 输出目录只包含 `.mm.dll` 和 `.pdb`。
+
+主项目构建、内嵌依赖和 BepInEx 部署见 [构建与部署](build-and-deployment.md)；计算器、转换器、验证器和各测试的具体边界见 [离线工具与验证](tools.md)。

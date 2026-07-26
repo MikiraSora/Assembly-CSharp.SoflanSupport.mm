@@ -1,4 +1,4 @@
-// SoflanSupport.GamePlayFumenController — 新增类型, 基于 head commit 2a7a4a4.
+// SoflanSupport.GamePlayFumenController — 新增类型, 基于脱敏 source snapshot.
 // 偏差: 去掉 L 键 DumpCurrent 调试路径(依赖 GameCtrl.DumpCurrent, 访问 private 字段, 已放弃);
 //       仅保留 P 键暂停功能。类型改为 public 以满足 Singleton<T> 的 new() 约束。
 using MAI2.Util;

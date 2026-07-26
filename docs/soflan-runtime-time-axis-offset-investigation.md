@@ -1,5 +1,7 @@
 # Soflan 运行时时间轴偏移调查与修复设计
 
+> 本文保留问题证据、修复推导和实施记录。当前日常规范以 [Soflan 变速系统](soflan-system.md)、[FixedSoflan](fixed-soflan.md) 和 [配置、日志与调试](configuration-and-debugging.md) 为准。
+
 ## 文档状态
 
 - 调查日期：2026-07-24
@@ -7,7 +9,7 @@
 - 修复状态：阶段 1～4 已实施并通过数值、构建、MonoMod 应用和静态 IL 验证
 - 未实施增强：identity group 原版路径 bypass；当前仍保留最多约 1px 的往返量化残差
 - 目标边界：只修正 Soflan 视觉时间轴，不修改歌曲播放、判定时间或 MA2 谱面时间
-- 主要复现谱面：`016800_01.ma2` 与 `016800_04.ma2`
+- 主要复现谱面：`example_01.ma2` 与 `example_04.ma2`（文件名已脱敏）
 
 本文记录以下问题的完整证据、数学证明、修复建议和测试方法：
 
@@ -50,7 +52,7 @@ Git commit: a9b547ac0cdc115242b092d79de7400356758710
 
 ```text
 Path:
-F:\SDEZ_165\Package\Sinmai_Data\Managed\Assembly-CSharp.dll
+F:\yourGame\Package\Sinmai_Data\Managed\Assembly-CSharp.dll
 
 SHA-256:
 257CC5F7733E6F48D75627DB32DC182F7C00D267CEA065F6AA6DDB6E2A2A0985
@@ -60,7 +62,7 @@ SHA-256:
 
 ```text
 Path:
-F:\SDEZ_165\Package\option\M501\music\music016800\016800_01.ma2
+F:\yourGame\Package\option\yourOption\music\yourMusic\example_01.ma2
 
 SHA-256:
 AC070C1DA756363C6DD939AEA0A27F41584F2EFDFB97FFCE50F13B82970F857E
@@ -68,7 +70,7 @@ AC070C1DA756363C6DD939AEA0A27F41584F2EFDFB97FFCE50F13B82970F857E
 
 ```text
 Path:
-F:\SDEZ_165\Package\option\M501\music\music016800\016800_04.ma2
+F:\yourGame\Package\option\yourOption\music\yourMusic\example_04.ma2
 
 SHA-256:
 56B2405D920A8B83975C903E346F5A466505CEAFCC855A4BBC13BA09A21F212A
@@ -131,7 +133,7 @@ NMTAP	7	0	3
 
 ### group 0 确实全程为 1.0x
 
-`016800_04.ma2` 的 1622 条 SFL 分布如下：
+`example_04.ma2` 的 1622 条 SFL 分布如下：
 
 | Group | SFL 行数 |
 | ---: | ---: |
@@ -570,7 +572,7 @@ observedOffset = note.time.msec - rawTGridMsec
 
 ### 逐 note 偏移碎片的实测证据
 
-对 `016800_04.ma2` 的 1488 条物件记录，使用 BPM `217`、分辨率 `384`、默认 `AdjustTiming=20`，按当前 net472 框架执行 TGrid 到毫秒换算，再计算：
+对 `example_04.ma2` 的 1488 条物件记录，使用 BPM `217`、分辨率 `384`、默认 `AdjustTiming=20`，按当前 net472 框架执行 TGrid 到毫秒换算，再计算：
 
 ```csharp
 observedOffset = originalRuntimeNoteMsec - frameworkRawNoteMsec;
@@ -939,7 +941,7 @@ noteSoflanTime = F_g(C + 60)
 
 本修复不需要修改：
 
-- `016800_01.ma2` 或 `016800_04.ma2`
+- `example_01.ma2` 或 `example_04.ma2`
 - music XML 启用记录
 - 歌曲文件
 - 原版判定时间和音效调度
@@ -961,7 +963,7 @@ noteSoflanTime = F_g(C + 60)
 
 ### 自动对比结果
 
-对实际 `016800_04.ma2` 的复杂组执行了原始轴参考实现与修正运行时轴实现的密集对比：
+对实际 `example_04.ma2` 的复杂组执行了原始轴参考实现与修正运行时轴实现的密集对比：
 
 ```text
 groups=11
@@ -975,7 +977,7 @@ maxSoflanYDelta=0.000000000
 测试包含 `0x` 停车、负速反向、加减速、多 group、BPM 边界和可见范围查询。
 `maxSoflanYDelta=0` 证明修复只平移输入时间原点，没有改变复杂 Soflan 的积分轨迹。
 
-对 `016800_01.ma2` 与 `016800_04.ma2` 的恒定 1x、同物件 Tap/Break/Star 全阶段对比：
+对 `example_01.ma2` 与 `example_04.ma2` 的恒定 1x、同物件 Tap/Break/Star 全阶段对比：
 
 ```text
 notes=1106
@@ -1152,8 +1154,8 @@ dotnet run --project tools/SoflanMaiBugTests/SoflanMaiBugTests.csproj -c Release
 
 建议同时录像或逐帧截图对照：
 
-1. 播放 `016800_01.ma2`。
-2. 播放 `016800_04.ma2`。
+1. 播放 `example_01.ma2`。
+2. 播放 `example_04.ma2`。
 3. 使用相同玩家物件速度、NoteSize、镜像和 AdjustTiming。
 4. 对照第 1654 行 Tap 和第 1653 行 Hold。
 5. 分别验证开关开启和关闭。
