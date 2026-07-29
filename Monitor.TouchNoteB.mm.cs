@@ -55,6 +55,39 @@ namespace Monitor
             return orig_GetNoteYPosition();
         }
 
+        private SoflanDiagnostic.JudgeProbe __SoflanBeginNoteCheckDiagnostics()
+        {
+            return SoflanDiagnostic.BeforeJudgeCheck(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                ButtonId,
+                SoflanDiagnostic.GetTouchAreaIndex(TouchArea, ButtonId),
+                false,
+                AppearMsec,
+                TailMsec,
+                JudgeType,
+                GetJudgeStartMsec(),
+                GetJudgeEndMsec(),
+                JudgeResult,
+                NoteJudge.ETiming.End,
+                EndFlag,
+                IsJudgeNote(),
+                JudgeTimingDiffMsec,
+                "TouchNoteB.NoteCheck");
+        }
+
+        private void __SoflanEndNoteCheckDiagnostics(
+            SoflanDiagnostic.JudgeProbe diagnosticProbe)
+        {
+            SoflanDiagnostic.AfterJudgeCheck(
+                diagnosticProbe,
+                JudgeResult,
+                NoteJudge.ETiming.End,
+                EndFlag,
+                JudgeTimingDiffMsec);
+        }
+
         private bool CheckSupportSoflan()
         {
             switch (NoteKind.getBaseType())
@@ -68,12 +101,14 @@ namespace Monitor
 
         private float GetTouchNoteYPositionSoflan()
         {
+            float runtimeMsec = NotesManager.GetCurrentMsec();
             float currentSoflanTime = touchSoflanManager.GetCurrentSoflanTimeCached(
                 MonitorId,
-                NotesManager.GetCurrentMsec(),
+                runtimeMsec,
                 touchSoflanGroup);
             float touchDispTime = DefaultMsec * 0.25f;
             float soflanStartTime = touchNoteSoflanTime - DefaultMsec - touchDispTime;
+            float diffTime = touchNoteSoflanTime - currentSoflanTime;
 
             NoteStat = NoteStatus.Move;
             if (currentSoflanTime <= soflanStartTime)
@@ -84,6 +119,21 @@ namespace Monitor
                 {
                     ColorsObject[i].color = new Color(1f, 1f, 1f, 0f);
                 }
+                SoflanDiagnostic.VisualSample(
+                    MonitorId,
+                    NoteIndex,
+                    NoteKind,
+                    touchSoflanGroup,
+                    runtimeMsec,
+                    currentSoflanTime,
+                    touchNoteSoflanTime,
+                    diffTime,
+                    0f,
+                    DefaultMsec + touchDispTime,
+                    DefaultMsec,
+                    (int)NoteStat,
+                    false,
+                    "TouchNoteB.GetNoteYPosition");
                 return 0f;
             }
 
@@ -100,6 +150,21 @@ namespace Monitor
                 {
                     ColorsObject[j].color = new Color(1f, 1f, 1f, fadeProgress);
                 }
+                SoflanDiagnostic.VisualSample(
+                    MonitorId,
+                    NoteIndex,
+                    NoteKind,
+                    touchSoflanGroup,
+                    runtimeMsec,
+                    currentSoflanTime,
+                    touchNoteSoflanTime,
+                    diffTime,
+                    fadeProgress,
+                    DefaultMsec + touchDispTime,
+                    DefaultMsec,
+                    (int)NoteStat,
+                    false,
+                    "TouchNoteB.GetNoteYPosition");
                 return fadeProgress;
             }
 
@@ -124,6 +189,21 @@ namespace Monitor
             {
                 NoticeObject.SetActive(touchNoteSoflanTime <= currentSoflanTime);
             }
+            SoflanDiagnostic.VisualSample(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                touchSoflanGroup,
+                runtimeMsec,
+                currentSoflanTime,
+                touchNoteSoflanTime,
+                diffTime,
+                gatherProgress,
+                DefaultMsec + touchDispTime,
+                DefaultMsec,
+                (int)NoteStat,
+                false,
+                "TouchNoteB.GetNoteYPosition");
             return 1f;
         }
     }

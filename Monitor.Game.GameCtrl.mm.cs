@@ -8,16 +8,21 @@ using MAI2.Util;
 using Manager;
 using MonoMod;
 using SoflanSupport;
+using System;
 
 namespace Monitor.Game
 {
     [MonoModPatch("global::Monitor.Game.GameCtrl")]
     public class SoflanGameCtrlHooks
     {
+        [MonoModIgnore]
+        private int monitorIndex;
+
         // UpdateCtrl: UserOption 赋值后 — 清空 SoflanManager 的共享每帧 soflan 时间缓存
         public void __SoflanClearCache(int monitorIndex)
         {
             Singleton<SoflanManager>.Instance.clearCurrentSoflanTimeCache(monitorIndex);
+            SoflanDiagnostic.CaptureInputFrame(monitorIndex);
         }
 
         // UpdateCtrl: 原 msec 可见性检查前 — soflan 可见性判定
@@ -27,10 +32,13 @@ namespace Monitor.Game
             var soflanManager = Singleton<SoflanManager>.Instance;
             if (!soflanManager.containsSoflans(monitorIndex))
                 return 0;
-            if (!SoflanManager.IsSupportedVisualSoflanKind(note.type.getEnum()))
-                return 0;
-
             var currentMsec = NotesManager.GetCurrentMsec();
+            if (!SoflanManager.IsSupportedVisualSoflanKind(note.type.getEnum()))
+            {
+                SoflanDiagnostic.VisibilityFallback(monitorIndex, note, currentMsec, num);
+                return 0;
+            }
+
             var noteSoflanGroup = soflanManager.getNoteSoflanGroup(monitorIndex, note);
             var visibleMsec = FixedSoflan.IsEnabledForNote(note)
                 ? FixedSoflan.GetVisibleMsec(FixedSoflan.GetUnifiedSpeed(note))
@@ -43,15 +51,72 @@ namespace Monitor.Game
                 currentMsec,
                 maiBugAdjustMsec,
                 noteSoflanGroup);
-            if (!soflanManager.checkNoteVisible(
+            var visible = soflanManager.checkNoteVisible(
                     monitorIndex,
                     note,
                     currentMsec,
                     visibleMsec,
                     noteSoflanGroup,
-                    soflanTime))
+                    soflanTime);
+            SoflanDiagnostic.VisibilityDecision(
+                monitorIndex,
+                note,
+                currentMsec,
+                visibleMsec,
+                noteSoflanGroup,
+                soflanTime,
+                visible);
+            if (!visible)
                 return 2;
             return 1;
+        }
+
+        public extern bool orig_RegistNote(NoteData note);
+
+        public bool RegistNote(NoteData note)
+        {
+            SoflanDiagnostic.RegisterAttempt(monitorIndex, note, "GameCtrl.RegistNote");
+            try
+            {
+                var result = orig_RegistNote(note);
+                SoflanDiagnostic.RegisterResult(
+                    monitorIndex,
+                    note,
+                    result,
+                    "GameCtrl.RegistNote");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                SoflanDiagnostic.Exception(
+                    monitorIndex,
+                    note?.indexNote ?? -1,
+                    "GameCtrl.RegistNote",
+                    ex);
+                throw;
+            }
+        }
+
+        public extern bool orig_SkipRegistNote(NoteData note);
+
+        public bool SkipRegistNote(NoteData note)
+        {
+            try
+            {
+                var result = orig_SkipRegistNote(note);
+                if (result)
+                    SoflanDiagnostic.SkipRegisterResult(monitorIndex, note, true);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                SoflanDiagnostic.Exception(
+                    monitorIndex,
+                    note?.indexNote ?? -1,
+                    "GameCtrl.SkipRegistNote",
+                    ex);
+                throw;
+            }
         }
 
     }

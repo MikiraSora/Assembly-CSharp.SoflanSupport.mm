@@ -12,6 +12,7 @@ namespace Manager
         // loadMa2Main: calcBPMList 调用前 — 只清空当前玩家的 soflan 状态
         public static void __SoflanClearPlayer(int playerId)
         {
+            SoflanDiagnostic.BeginChartLoad(playerId);
             SoflanPanelBehaviour.ClearSelectedNote();
             Singleton<SoflanManager>.Instance.clearPlayer(playerId);
         }

@@ -17,6 +17,7 @@ namespace SoflanSupport
         private static readonly ConcurrentQueue<LogEntry> queue = new ConcurrentQueue<LogEntry>();
         private static readonly AutoResetEvent queueSignal = new AutoResetEvent(false);
         private static readonly Thread workerThread;
+        private static long nextSequence;
 
         static PatchLog()
         {
@@ -41,9 +42,22 @@ namespace SoflanSupport
             Enqueue("ERROR", msg);
         }
 
+        // Release/Debug 均保留的运行时诊断通道。与普通 INFO 日志分离，便于现场日志筛选。
+        public static void Diagnostic(string msg)
+        {
+            if (!Setting.EnableSoflanDiagnosticLog)
+                return;
+            Enqueue("DIAG", msg);
+        }
+
         private static void Enqueue(string level, string msg)
         {
-            queue.Enqueue(new LogEntry(Thread.CurrentThread.ManagedThreadId, level, msg ?? string.Empty));
+            queue.Enqueue(new LogEntry(
+                Interlocked.Increment(ref nextSequence),
+                DateTime.UtcNow,
+                Thread.CurrentThread.ManagedThreadId,
+                level,
+                msg ?? string.Empty));
             queueSignal.Set();
         }
 
@@ -87,6 +101,12 @@ namespace SoflanSupport
                 for (var i = 0; i < batch.Count; i++)
                 {
                     var entry = batch[i];
+                    text.Append("[Seq: ");
+                    text.Append(entry.Sequence.ToString("D8"));
+                    text.Append("]");
+                    text.Append("[Utc: ");
+                    text.Append(entry.TimestampUtc.ToString("O"));
+                    text.Append("]");
                     text.Append("[Thread: ");
                     text.Append(entry.ThreadId);
                     text.Append("]");
@@ -106,7 +126,7 @@ namespace SoflanSupport
                 {
                     if (batch[i].Level == "ERROR")
                         UnityEngine.Debug.LogError(batch[i].Message);
-                    else
+                    else if (batch[i].Level != "DIAG")
                         UnityEngine.Debug.Log(batch[i].Message);
                 }
                 catch { }
@@ -117,12 +137,21 @@ namespace SoflanSupport
 
         private struct LogEntry
         {
+            public readonly long Sequence;
+            public readonly DateTime TimestampUtc;
             public readonly int ThreadId;
             public readonly string Level;
             public readonly string Message;
 
-            public LogEntry(int threadId, string level, string message)
+            public LogEntry(
+                long sequence,
+                DateTime timestampUtc,
+                int threadId,
+                string level,
+                string message)
             {
+                Sequence = sequence;
+                TimestampUtc = timestampUtc;
                 ThreadId = threadId;
                 Level = level;
                 Message = message;

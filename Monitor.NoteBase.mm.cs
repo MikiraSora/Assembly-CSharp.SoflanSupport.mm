@@ -95,13 +95,50 @@ namespace Monitor
                 note.type.getEnum(),
                 2f * visualDefaultMsec);
 
+            SoflanDiagnostic.ObjectInitialized(
+                MonitorId,
+                note,
+                AppearMsec,
+                TailMsec,
+                visualDefaultMsec,
+                noteSoflanGroup,
+                isFixedSoflanToUnifiedSpeed,
+                fixedSoflanUnifiedSpeed,
+                noteSoflanTime,
+                maiBugAdjustMsec,
+                "NoteBase.Initialize");
+
         }
 
         protected extern void orig_NoteCheck();
 
         protected void NoteCheck()
         {
+            var diagnosticProbe = SoflanDiagnostic.BeforeJudgeCheck(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                ButtonId,
+                -1,
+                true,
+                AppearMsec,
+                TailMsec,
+                JudgeType,
+                GetJudgeStartMsec(),
+                GetJudgeEndMsec(),
+                JudgeResult,
+                NoteJudge.ETiming.End,
+                EndFlag,
+                IsJudgeNote(),
+                JudgeTimingDiffMsec,
+                "NoteBase.NoteCheck");
             orig_NoteCheck();
+            SoflanDiagnostic.AfterJudgeCheck(
+                diagnosticProbe,
+                JudgeResult,
+                NoteJudge.ETiming.End,
+                EndFlag,
+                JudgeTimingDiffMsec);
 
             if (isInSoflan && checkSupportSoflan() && !EndFlag)
             {
@@ -344,6 +381,22 @@ namespace Monitor
                 SoflanPanelBehaviour.HasSelectedData = true;
             }
 #endif
+
+            SoflanDiagnostic.VisualSample(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                noteSoflanGroup,
+                currentTime,
+                noteSoflanTime - diffTime,
+                noteSoflanTime,
+                diffTime,
+                clipedSoflanY,
+                scaleStartTime,
+                moveStartTime,
+                (int)NoteStat,
+                isFixedSoflanToUnifiedSpeed,
+                "NoteBase.GetNoteYPosition");
 
             return clipedSoflanY;
         }

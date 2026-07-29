@@ -115,7 +115,16 @@ namespace SoflanSupport
                 FailSoflanMarker(noteData, marker.Marker, markerReason);
 
             if (!marker.HasMarker)
+            {
+                SoflanDiagnostic.NoteLoaded(
+                    playerId,
+                    noteData,
+                    0,
+                    false,
+                    FixedSoflan.DefaultUnifiedSpeed,
+                    marker.Marker);
                 return;
+            }
 
             var soflanGroup = marker.Group;
             var isFixedSoflan = marker.IsFixedSoflan;
@@ -129,6 +138,13 @@ namespace SoflanSupport
 
             PatchLog.WriteLine(
                 $"register player:{playerId}, noteIndex:{noteData.indexNote}, marker:{marker.Marker}, soflanGroup:{soflanGroup}, fixedSoflan:{isFixedSoflan}, fixedSoflanSpeed:{fixedSoflanUnifiedSpeed.ToString(CultureInfo.InvariantCulture)}");
+            SoflanDiagnostic.NoteLoaded(
+                playerId,
+                noteData,
+                soflanGroup,
+                isFixedSoflan,
+                fixedSoflanUnifiedSpeed,
+                marker.Marker);
         }
 
         private static bool TryReadRecordTGrid(MA2Record record, out TGrid tGrid)
@@ -188,7 +204,11 @@ namespace SoflanSupport
             var filePath = sr.GetHeader()._notesName;
             if (!File.Exists(filePath))
             {
-                //log error
+                SoflanDiagnostic.CompositionLoaded(
+                    playerId,
+                    filePath,
+                    false,
+                    state.RuntimeChartOffsetMsec);
                 return;
             }
 
@@ -204,6 +224,7 @@ namespace SoflanSupport
                     state.SoflanListMap.Add(soflan);
                     state.ContainSoflans = true;
                     PatchLog.WriteLine($"parse soflan: {soflan}");
+                    SoflanDiagnostic.SoflanLineLoaded(playerId, line);
                 }
             }
 
@@ -242,6 +263,11 @@ namespace SoflanSupport
             }
 
             PatchLog.WriteLine($"---------------------------------------");
+            SoflanDiagnostic.CompositionLoaded(
+                playerId,
+                filePath,
+                state.ContainSoflans,
+                state.RuntimeChartOffsetMsec);
         }
 
         private bool tryParseSoflan(string line, out ISoflan soflan)

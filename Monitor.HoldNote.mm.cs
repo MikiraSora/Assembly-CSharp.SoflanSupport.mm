@@ -73,7 +73,10 @@ namespace Monitor
                 float tailDiffTime = holdTailSoflanTime - currentSoflanTime;
 
                 ExecuteSoflanVisual(headDiffTime, tailDiffTime, currentMsec);
+                const string diagnosticSource = "HoldNote.ExecuteSoflan";
+                var diagnosticProbe = BeginNoteCheckDiagnostics(diagnosticSource);
                 orig_NoteCheck();
+                EndNoteCheckDiagnostics(diagnosticProbe, diagnosticSource);
                 ApplySoflanScale(headDiffTime);
                 return;
             }
@@ -85,7 +88,10 @@ namespace Monitor
 
         protected void NoteCheck()
         {
+            const string diagnosticSource = "HoldNote.NoteCheck";
+            var diagnosticProbe = BeginNoteCheckDiagnostics(diagnosticSource);
             orig_NoteCheck();
+            EndNoteCheckDiagnostics(diagnosticProbe, diagnosticSource);
 
             if (holdIsInSoflan && CheckSupportSoflan())
             {
@@ -97,6 +103,51 @@ namespace Monitor
 
                 ApplySoflanScale(holdHeadSoflanTime - currentSoflanTime);
             }
+        }
+
+        private SoflanDiagnostic.JudgeProbe BeginNoteCheckDiagnostics(string source)
+        {
+            return SoflanDiagnostic.BeforeJudgeCheck(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                ButtonId,
+                -1,
+                true,
+                AppearMsec,
+                TailMsec,
+                JudgeType,
+                GetJudgeStartMsec(),
+                GetJudgeEndMsec(),
+                JudgeResult,
+                GetJudgeHeadResult(),
+                EndFlag,
+                IsJudgeNote(),
+                JudgeTimingDiffMsec,
+                source);
+        }
+
+        private void EndNoteCheckDiagnostics(
+            SoflanDiagnostic.JudgeProbe diagnosticProbe,
+            string source)
+        {
+            SoflanDiagnostic.AfterJudgeCheck(
+                diagnosticProbe,
+                JudgeResult,
+                GetJudgeHeadResult(),
+                EndFlag,
+                JudgeTimingDiffMsec);
+            SoflanDiagnostic.HoldState(
+                MonitorId,
+                NoteIndex,
+                GetJudgeHeadResult(),
+                HeadJudged,
+                BodyOn,
+                LastHoldState,
+                TrigetOn,
+                HoldReleaseTime,
+                EndFlag,
+                source);
         }
 
         private void ExecuteSoflanVisual(float headDiffTime, float tailDiffTime, float currentMsec)
@@ -156,6 +207,22 @@ namespace Monitor
 
             SpriteRenderEx.size = SpriteRender.size;
             EffectSprite.size = SpriteRender.size;
+
+            SoflanDiagnostic.VisualSample(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                holdSoflanGroup,
+                currentMsec,
+                holdHeadSoflanTime - headDiffTime,
+                holdHeadSoflanTime,
+                headDiffTime,
+                headY,
+                scaleStartTime,
+                moveStartTime,
+                (int)NoteStat,
+                false,
+                "HoldNote.ExecuteSoflanVisual");
         }
 
         private float GetHoldHeadYPositionSoflan(float diffTime, float moveStartTime, float scaleStartTime)

@@ -63,7 +63,31 @@ namespace Monitor
 
         protected void NoteCheck()
         {
+            var diagnosticProbe = SoflanDiagnostic.BeforeJudgeCheck(
+                MonitorId,
+                NoteIndex,
+                NoteKind,
+                ButtonId,
+                -1,
+                true,
+                AppearMsec,
+                TailMsec,
+                JudgeType,
+                GetJudgeStartMsec(),
+                GetJudgeEndMsec(),
+                JudgeResult,
+                NoteJudge.ETiming.End,
+                EndFlag,
+                IsJudgeNote(),
+                JudgeTimingDiffMsec,
+                "BreakNote.NoteCheck");
             orig_NoteCheck();
+            SoflanDiagnostic.AfterJudgeCheck(
+                diagnosticProbe,
+                JudgeResult,
+                NoteJudge.ETiming.End,
+                EndFlag,
+                JudgeTimingDiffMsec);
 
             if (breakIsInSoflan && CheckSupportSoflan() && !EndFlag)
             {

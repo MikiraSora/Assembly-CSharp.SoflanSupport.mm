@@ -13,6 +13,7 @@ Soflan 只改变物件的出现、移动、缩放和部分动画时间轴，不�
 - 支持 Tap、Break、Star、Hold、BreakHold、TouchNoteB 和 TouchNoteC 的 Soflan 视觉。
 - 提供 FixedSoflan，使 Tap 系物件按声明的固定视觉速度运行，不受玩家物件速度影响。
 - Debug 构建提供 Soflan Monitor、group 倍率、右键选中 Tap 和诊断数据复制。
+- Release / Debug 均可记录输入、可见性、注册、视觉、判定和 Miss 的关联诊断事件。
 - 附带 Soflan 计算器、MA2 转 Majdata 脚本及 marker、日志、时间轴验证工具。
 
 ## 支持范围
@@ -126,17 +127,19 @@ FixedSoflan 只对 Tap、Break、Star 等 Tap 系物件生效。它不会改变�
 ```ini
 [Patches]
 EnablePatchLog=1
+EnableSoflanDiagnosticLog=1
 EnableSoflanMaiBugAdjust=1
 ```
 
 | 选项 | 默认值 | 说明 |
 | --- | ---: | --- |
 | `EnablePatchLog` | `1` | 控制 Debug 构建的 INFO 日志；ERROR 始终保留 |
+| `EnableSoflanDiagnosticLog` | `1` | 控制 Release / Debug 的输入、物件、判定与 Miss 诊断事件 |
 | `EnableSoflanMaiBugAdjust` | `1` | 控制 Tap/Break/Star/Hold 族的 MaiBug 视觉偏移是否进入 Soflan 时间轴 |
 
 配置首次使用时读取一次，修改后需要完整重启游戏。`EnableSoflanMaiBugAdjust` 只影响视觉，不影响歌曲或判定。
 
-日志写入游戏当前目录下的 `dpSoflanSupport.log`，编码为 UTF-8 without BOM。
+日志写入游戏当前目录下的 `dpSoflanSupport.log`，编码为 UTF-8 without BOM。诊断事件可用 `player + note` 串联 `NOTE_LOAD`、`VISIBILITY`、`REGISTER_RESULT`、`INPUT`、`JUDGE_RESULT` 和 `MISS`；详细字段见[配置、日志与调试](docs/configuration-and-debugging.md)。
 
 ## 快捷键与调试
 

@@ -1,9 +1,13 @@
-// MonoModRules — 在 patch 时运行, 通过 PostProcessor 对 4 个目标方法做精确 IL 插入.
+// MonoModRules — 在 patch 时运行, 通过 PostProcessor 对 10 个目标方法做精确 IL 插入.
 // 对应 head 中无法用 orig_ 表达的"方法体中间插入":
 //   1. NotesReader.loadMa2Main : calcBPMList 前 __SoflanClearPlayer ; calcTotal 后 __SoflanLoadComposition
 //   2. NotesReader.loadNote    : ret 前 __SoflanLoadNote(noteData, rec, this, _playerID)
 //   3. GameCtrl.UpdateCtrl     : UserOption 后 __SoflanClearCache ; msec 检查前 __SoflanNoteDecision 派发
 //   4. GameProcess.OnUpdate    : 方法起始 __SoflanUpdateGamePlayFumenController
+//   5. GameScoreList.SetResult : 最终组合方法入口快照 isJudged ; 返回前 __SoflanScoreResult
+//   6. SlideRoot/SlideFan      : 最终 Initialize/NoteCheck 返回前记录初始化和滑动进度
+//   7. TouchHoldC.NoteCheck    : 最终 Mine 判定方法入口/所有返回点记录判定与 Hold 状态
+//   8. TouchNoteB.NoteCheck    : 最终 Mine 双通道判定方法入口/所有返回点记录判定结果
 // 锚点基于被检视的真实 base IL (Mono.Cecil). 插入调用引用的辅助方法由 patch_ 类复制进目标类型.
 using System;
 using System.Linq;
@@ -29,6 +33,10 @@ namespace MonoMod
             PatchLoadNote(module);
             PatchUpdateCtrl(module);
             PatchOnUpdate(module);
+            PatchGameScoreResult(module);
+            PatchSlideDiagnostics(module);
+            PatchTouchHoldDiagnostics(module);
+            PatchTouchNoteDiagnostics(module);
             StripCompilerNullableMetadata(module);
             // 注: SimpleSoflanFramework.Core 源码已通过 Shared Project 直接内置进 .mm.dll,
             // 运行时无需再加载外部 Core.dll, 故原 DependencyAssemblyResolver.Register() 注入已移除.
@@ -460,6 +468,201 @@ namespace MonoMod
 
             var first = body.Instructions[0];
             il.InsertBefore(first, il.Create(OpCodes.Call, helper));
+        }
+
+        // ---------------- 5. GameScoreList.SetResult ----------------
+        // 不用 orig_SetResult 包装，避免覆盖先加载的 NoteFeature Mine 计分策略。
+        // PostProcessor 在所有普通 patch 完成后对最终 SetResult 插入纯观测调用。
+        private static void PatchGameScoreResult(ModuleDefinition module)
+        {
+            const string typeName = "Manager.GameScoreList";
+            var type = module.GetType(typeName)
+                       ?? throw new Exception($"[SoflanRules] type not found: {typeName}");
+            var method = GetMethod(module, typeName, "SetResult", 3);
+            var body = method.Body;
+            var il = body.GetILProcessor();
+            var getIsJudged = GetOwnMethod(type, "__SoflanGetIsJudged");
+            var scoreResult = GetOwnMethod(type, "__SoflanScoreResult");
+            var wasJudged = new VariableDefinition(module.TypeSystem.Boolean);
+            body.Variables.Add(wasJudged);
+            body.InitLocals = true;
+
+            var first = body.Instructions[0];
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg_1));
+            il.InsertBefore(first, il.Create(OpCodes.Call, getIsJudged));
+            il.InsertBefore(first, il.Create(OpCodes.Stloc, wasJudged));
+
+            var returns = body.Instructions
+                .Where(instruction => instruction.OpCode == OpCodes.Ret)
+                .ToArray();
+            if (returns.Length == 0)
+                throw new Exception("[SoflanRules] GameScoreList.SetResult: ret not found");
+
+            foreach (var ret in returns)
+            {
+                var diagnosticStart = il.Create(OpCodes.Ldarg_0);
+                il.InsertBefore(ret, diagnosticStart);
+                il.InsertBefore(ret, il.Create(OpCodes.Ldarg_1));
+                il.InsertBefore(ret, il.Create(OpCodes.Ldarg_2));
+                il.InsertBefore(ret, il.Create(OpCodes.Ldarg_3));
+                il.InsertBefore(ret, il.Create(OpCodes.Ldloc, wasJudged));
+                il.InsertBefore(ret, il.Create(OpCodes.Call, scoreResult));
+                RetargetBranches(body, ret, diagnosticStart);
+            }
+        }
+
+        private static void RetargetBranches(
+            Mono.Cecil.Cil.MethodBody body,
+            Instruction oldTarget,
+            Instruction newTarget)
+        {
+            foreach (var instruction in body.Instructions)
+            {
+                if (instruction.Operand == oldTarget)
+                {
+                    instruction.Operand = newTarget;
+                }
+                else if (instruction.Operand is Instruction[] targets)
+                {
+                    for (var i = 0; i < targets.Length; i++)
+                    {
+                        if (targets[i] == oldTarget)
+                            targets[i] = newTarget;
+                    }
+                }
+            }
+
+            foreach (var handler in body.ExceptionHandlers)
+            {
+                if (handler.TryStart == oldTarget) handler.TryStart = newTarget;
+                if (handler.TryEnd == oldTarget) handler.TryEnd = newTarget;
+                if (handler.HandlerStart == oldTarget) handler.HandlerStart = newTarget;
+                if (handler.HandlerEnd == oldTarget) handler.HandlerEnd = newTarget;
+                if (handler.FilterStart == oldTarget) handler.FilterStart = newTarget;
+            }
+        }
+
+        // ---------------- 6. SlideRoot / SlideFan diagnostics ----------------
+        // 观测调用插在最终组合方法返回前，保留 NoteFeature 的 Yellow 和 Mine 路径。
+        private static void PatchSlideDiagnostics(ModuleDefinition module)
+        {
+            var slideRoot = module.GetType("Monitor.SlideRoot")
+                            ?? throw new Exception("[SoflanRules] type not found: Monitor.SlideRoot");
+            var slideRootInitialize = GetMethod(module, "Monitor.SlideRoot", "Initialize", 1);
+            var slideRootNoteCheck = GetMethod(module, "Monitor.SlideRoot", "NoteCheck", 0);
+            InsertInstanceCallBeforeReturns(
+                slideRootInitialize,
+                GetOwnMethod(slideRoot, "__SoflanLogInitialize"),
+                loadFirstArgument: true);
+            InsertInstanceCallBeforeReturns(
+                slideRootNoteCheck,
+                GetOwnMethod(slideRoot, "__SoflanLogProgress"),
+                loadFirstArgument: false);
+
+            var slideFan = module.GetType("Monitor.SlideFan")
+                           ?? throw new Exception("[SoflanRules] type not found: Monitor.SlideFan");
+            var slideFanNoteCheck = GetMethod(module, "Monitor.SlideFan", "NoteCheck", 0);
+            InsertInstanceCallBeforeReturns(
+                slideFanNoteCheck,
+                GetOwnMethod(slideFan, "__SoflanLogProgress"),
+                loadFirstArgument: false);
+        }
+
+        private static void InsertInstanceCallBeforeReturns(
+            MethodDefinition method,
+            MethodDefinition helper,
+            bool loadFirstArgument)
+        {
+            var body = method.Body;
+            var il = body.GetILProcessor();
+            var returns = body.Instructions
+                .Where(instruction => instruction.OpCode == OpCodes.Ret)
+                .ToArray();
+            if (returns.Length == 0)
+                throw new Exception($"[SoflanRules] {method.FullName}: ret not found");
+
+            foreach (var ret in returns)
+            {
+                var diagnosticStart = il.Create(OpCodes.Ldarg_0);
+                il.InsertBefore(ret, diagnosticStart);
+                if (loadFirstArgument)
+                    il.InsertBefore(ret, il.Create(OpCodes.Ldarg_1));
+                il.InsertBefore(ret, il.Create(OpCodes.Call, helper));
+                RetargetBranches(body, ret, diagnosticStart);
+            }
+        }
+
+        // ---------------- 7. TouchHoldC diagnostics ----------------
+        private static void PatchTouchHoldDiagnostics(ModuleDefinition module)
+        {
+            const string typeName = "Monitor.TouchHoldC";
+            var type = module.GetType(typeName)
+                       ?? throw new Exception($"[SoflanRules] type not found: {typeName}");
+            var method = GetMethod(module, typeName, "NoteCheck", 0);
+            var begin = GetOwnMethod(type, "__SoflanBeginNoteCheckDiagnostics");
+            var end = GetOwnMethod(type, "__SoflanEndNoteCheckDiagnostics");
+            var body = method.Body;
+            var il = body.GetILProcessor();
+            var probe = new VariableDefinition(begin.ReturnType);
+            body.Variables.Add(probe);
+            body.InitLocals = true;
+
+            var first = body.Instructions[0];
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+            il.InsertBefore(first, il.Create(OpCodes.Call, begin));
+            il.InsertBefore(first, il.Create(OpCodes.Stloc, probe));
+
+            var returns = body.Instructions
+                .Where(instruction => instruction.OpCode == OpCodes.Ret)
+                .ToArray();
+            if (returns.Length == 0)
+                throw new Exception("[SoflanRules] TouchHoldC.NoteCheck: ret not found");
+
+            foreach (var ret in returns)
+            {
+                var diagnosticStart = il.Create(OpCodes.Ldarg_0);
+                il.InsertBefore(ret, diagnosticStart);
+                il.InsertBefore(ret, il.Create(OpCodes.Ldloc, probe));
+                il.InsertBefore(ret, il.Create(OpCodes.Call, end));
+                RetargetBranches(body, ret, diagnosticStart);
+            }
+        }
+
+        // ---------------- 8. TouchNoteB diagnostics ----------------
+        private static void PatchTouchNoteDiagnostics(ModuleDefinition module)
+        {
+            const string typeName = "Monitor.TouchNoteB";
+            var type = module.GetType(typeName)
+                       ?? throw new Exception($"[SoflanRules] type not found: {typeName}");
+            var method = GetMethod(module, typeName, "NoteCheck", 0);
+            var begin = GetOwnMethod(type, "__SoflanBeginNoteCheckDiagnostics");
+            var end = GetOwnMethod(type, "__SoflanEndNoteCheckDiagnostics");
+            var body = method.Body;
+            var il = body.GetILProcessor();
+            var probe = new VariableDefinition(begin.ReturnType);
+            body.Variables.Add(probe);
+            body.InitLocals = true;
+
+            var first = body.Instructions[0];
+            il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+            il.InsertBefore(first, il.Create(OpCodes.Call, begin));
+            il.InsertBefore(first, il.Create(OpCodes.Stloc, probe));
+
+            var returns = body.Instructions
+                .Where(instruction => instruction.OpCode == OpCodes.Ret)
+                .ToArray();
+            if (returns.Length == 0)
+                throw new Exception("[SoflanRules] TouchNoteB.NoteCheck: ret not found");
+
+            foreach (var ret in returns)
+            {
+                var diagnosticStart = il.Create(OpCodes.Ldarg_0);
+                il.InsertBefore(ret, diagnosticStart);
+                il.InsertBefore(ret, il.Create(OpCodes.Ldloc, probe));
+                il.InsertBefore(ret, il.Create(OpCodes.Call, end));
+                RetargetBranches(body, ret, diagnosticStart);
+            }
         }
     }
 }

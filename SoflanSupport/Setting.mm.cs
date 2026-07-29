@@ -13,6 +13,7 @@ namespace SoflanSupport
     public static class Setting
     {
         public static bool EnablePatchLog { set; get; } = true;
+        public static bool EnableSoflanDiagnosticLog { private set; get; } = true;
         public static bool EnableSoflanMaiBugAdjust { private set; get; } = true;
 
         private static bool init = false;
@@ -26,6 +27,10 @@ namespace SoflanSupport
             using (var iniFile = new IniFile("mai2.ini"))
             {
                 EnablePatchLog = iniFile.getValue("Patches", "EnablePatchLog", true);
+                EnableSoflanDiagnosticLog = iniFile.getValue(
+                    "Patches",
+                    "EnableSoflanDiagnosticLog",
+                    true);
                 EnableSoflanMaiBugAdjust = iniFile.getValue(
                     "Patches",
                     "EnableSoflanMaiBugAdjust",
@@ -34,6 +39,7 @@ namespace SoflanSupport
 
             PatchLog.WriteLine($"---------DpPatches.Setting------------");
             PatchLog.WriteLine($"EnablePatchLog = {EnablePatchLog}");
+            PatchLog.WriteLine($"EnableSoflanDiagnosticLog = {EnableSoflanDiagnosticLog}");
             PatchLog.WriteLine($"EnableSoflanMaiBugAdjust = {EnableSoflanMaiBugAdjust}");
             PatchLog.WriteLine($"----------");
             PatchLog.WriteLine($"--------------------------------------");

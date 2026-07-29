@@ -9,7 +9,7 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <!-- 输出整洁: 仅产出 patch .mm.dll 自身, 不拷贝目标/Unity/System/MonoMod 等传递依赖 -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <NoWarn>$(NoWarn);CS0626;CS0108;CS0114;CS0414;CS0169</NoWarn>
+    <NoWarn>$(NoWarn);CS0626;CS0108;CS0114;CS0414;CS0169;CS0649</NoWarn>
     <!-- 与 NetFx472 项目一致: net472 已内置 System.Linq.Append, 关闭 Core 里的自定义 Append 以免二义性 -->
     <DefineConstants>$(DefineConstants);HAS_SYSTEM_LINQ_APPEND</DefineConstants>
   </PropertyGroup>

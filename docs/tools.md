@@ -10,7 +10,7 @@
 | `tools/Convert-Ma2ToMajdata.ps1` | PowerShell | 把受限 MA2 BPM/SFL/lane note 转为 Majdata 文本 | 否 |
 | `tools/MajdataValidation` | `net8.0` | 用 MajSimai 重新解析转换结果并比较关键集合 | 否 |
 | `tools/SoflanMarkerTests` | `net8.0` | 验证共享 marker 语法 | 否 |
-| `tools/SoflanLogTests` | `net8.0` | 验证异步 ERROR 日志和 UTF-8 无 BOM | 否 |
+| `tools/SoflanLogTests` | `net8.0` | 验证 Release DIAG 开关、异步 ERROR 日志和 UTF-8 无 BOM | 否 |
 | `tools/SoflanMaiBugTests` | `net472` | 验证时间轴、MaiBug、可见性、多 group 和双玩家数值 | 否 |
 
 ## SoflanCalculator
@@ -144,7 +144,7 @@ dotnet run --project .\tools\SoflanMarkerTests\SoflanMarkerTests.csproj -c Relea
 dotnet run --project .\tools\SoflanLogTests\SoflanLogTests.csproj -c Release
 ```
 
-在临时目录触发异步 ERROR，最多等待 5 秒，验证文件存在、包含 `[ERROR]`、消息完整、UTF-8 严格可解码且无 BOM。
+在临时目录触发启用/禁用的异步 DIAG 和 ERROR，最多等待 5 秒，验证 Release 下 DIAG 会写入、关闭 `EnableSoflanDiagnosticLog` 后不写、ERROR 不受影响、UTF-8 严格可解码且无 BOM。
 
 ### MaiBug 与运行时时间轴
 

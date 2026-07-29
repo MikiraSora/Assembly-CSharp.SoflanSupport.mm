@@ -65,6 +65,7 @@ Release 与 Debug 的运行时差异：
 | Soflan、FixedSoflan、Hold/Touch、可见性 | 有 | 有 |
 | `P` 键暂停/恢复 | 有 | 有 |
 | 普通 `PatchLog.WriteLine()` INFO 日志 | 编译移除 | 受 `EnablePatchLog` 控制 |
+| `PatchLog.Diagnostic()` DIAG 现场日志 | 受 `EnableSoflanDiagnosticLog` 控制 | 受 `EnableSoflanDiagnosticLog` 控制 |
 | Soflan Monitor、右键选择、复制面板数据 | 无 | 有 |
 | marker/SFL 等错误日志 | 有 | 有 |
 
