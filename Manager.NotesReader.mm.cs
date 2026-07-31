@@ -9,10 +9,16 @@ namespace Manager
 {
     public class patch_NotesReader : NotesReader
     {
-        // loadMa2Main: calcBPMList 调用前 — 只清空当前玩家的 soflan 状态
+        // loadMa2Main: calcBPMList 调用前 — 开始诊断并清空当前玩家的 soflan 状态
         public static void __SoflanClearPlayer(int playerId)
         {
             SoflanDiagnostic.BeginChartLoad(playerId);
+            __SoflanResetPlayer(playerId);
+        }
+
+        // 其它 loadMa2Main 包装拒绝谱面时，只回滚运行时状态，不开始新的诊断会话
+        public static void __SoflanResetPlayer(int playerId)
+        {
             SoflanPanelBehaviour.ClearSelectedNote();
             Singleton<SoflanManager>.Instance.clearPlayer(playerId);
         }
