@@ -11,6 +11,7 @@
     <Compile Include="..\..\SoflanSupport\MaiBugAdjust.mm.cs" Link="MaiBugAdjust.mm.cs" />
     <Compile Include="..\..\SoflanSupport\SoflanRuntimeTime.mm.cs" Link="SoflanRuntimeTime.mm.cs" />
     <Compile Include="..\..\SoflanSupport\SoflanMarkerParser.mm.cs" Link="SoflanMarkerParser.mm.cs" />
+    <Compile Include="..\..\SoflanSupport\SoflanJudgeOrder.mm.cs" Link="SoflanJudgeOrder.mm.cs" />
     <Compile Include="..\..\SoflanCalculator\Ma2Parser.cs" Link="Ma2Parser.cs" />
     <Compile Include="..\..\SoflanCalculator\SoflanCalcEngine.cs" Link="SoflanCalcEngine.cs" />
     <ProjectReference Include="..\..\Dependencies\SimpleSoflanFramework\SimpleSoflanFramework.Core.NetFx472\SimpleSoflanFramework.Core.NetFx472.csproj">
