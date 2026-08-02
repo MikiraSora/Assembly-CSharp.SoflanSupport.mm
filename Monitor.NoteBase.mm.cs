@@ -95,6 +95,8 @@ namespace Monitor
                 note.type.getEnum(),
                 2f * visualDefaultMsec);
 
+            RestoreOriginalLaneJudgeOrder();
+
             SoflanDiagnostic.ObjectInitialized(
                 MonitorId,
                 note,
@@ -108,6 +110,36 @@ namespace Monitor
                 maiBugAdjustMsec,
                 "NoteBase.Initialize");
 
+        }
+
+        private void RestoreOriginalLaneJudgeOrder()
+        {
+            if (!isInSoflan)
+                return;
+
+            var noteTransform = transform;
+            var laneTransform = noteTransform.parent;
+            if (laneTransform == null)
+                return;
+
+            // 原版按 NoteData/indexNote 顺序注册，并依赖 launcher 的 sibling 顺序
+            // 决定同 lane 里哪个物件能判定。反向 Soflan 会打乱注册时间，因此在
+            // 物件创建后恢复与原版 NoteIndex 一致的 sibling 顺序。
+            var siblingIndex = SoflanJudgeOrder.GetSiblingIndex(
+                NoteIndex,
+                laneTransform.childCount,
+                index =>
+                {
+                    var siblingTransform = laneTransform.GetChild(index);
+                    if (siblingTransform == noteTransform)
+                        return null;
+
+                    var siblingNote = siblingTransform.GetComponent<NoteBase>();
+                    return siblingNote != null && siblingNote.gameObject.activeSelf
+                        ? siblingNote.GetNoteIndex()
+                        : (int?)null;
+                });
+            noteTransform.SetSiblingIndex(siblingIndex);
         }
 
         protected extern void orig_NoteCheck();

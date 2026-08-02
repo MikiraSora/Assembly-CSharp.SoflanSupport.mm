@@ -1,6 +1,7 @@
 // MonoModRules — 在 patch 时运行, 通过 PostProcessor 对 10 个目标方法做精确 IL 插入.
 // 对应 head 中无法用 orig_ 表达的"方法体中间插入":
-//   1. NotesReader.loadMa2Main : calcBPMList 前 __SoflanClearPlayer ; calcTotal 后 __SoflanLoadComposition
+//   1. NotesReader.loadMa2Main : calcBPMList 前 __SoflanClearPlayer ; calcTotal 后 __SoflanLoadComposition ;
+//                                NoteFeature 专用回滚点的 init 后 __SoflanResetPlayer
 //   2. NotesReader.loadNote    : ret 前 __SoflanLoadNote(noteData, rec, this, _playerID)
 //   3. GameCtrl.UpdateCtrl     : UserOption 后 __SoflanClearCache ; msec 检查前 __SoflanNoteDecision 派发
 //   4. GameProcess.OnUpdate    : 方法起始 __SoflanUpdateGamePlayFumenController
@@ -264,8 +265,36 @@ namespace MonoMod
             var il = body.GetILProcessor();
 
             var clearPlayer = GetOwnMethod(type, "__SoflanClearPlayer");
+            var resetPlayer = GetOwnMethod(type, "__SoflanResetPlayer");
             var loadComp = GetOwnMethod(type, "__SoflanLoadComposition");
             var playerIdField = GetOwnField(type, "_playerID");
+
+            // NoteFeature 将拒谱路径收敛到专用回滚方法。只挂接这个组合点，避免影响构造函数等其它 init 调用。
+            var rollbackMethod = type.Methods.SingleOrDefault(candidate =>
+                candidate.Name == "__NoteFeatureRollbackChartLoad"
+                && candidate.Parameters.Count == 0
+                && candidate.Body != null);
+            if (rollbackMethod != null)
+            {
+                var initCalls = rollbackMethod.Body.Instructions
+                    .Where(i => IsCallTo(i, "init"))
+                    .ToArray();
+                if (initCalls.Length != 1)
+                {
+                    throw new Exception(
+                        $"[SoflanRules] __NoteFeatureRollbackChartLoad: expected 1 init call, actual {initCalls.Length}");
+                }
+
+                var rollbackIl = rollbackMethod.Body.GetILProcessor();
+                var initCall = initCalls[0];
+                // InsertAfter 需逆序以保持 ldarg.0, ldfld, call 的执行顺序。
+                rollbackIl.InsertAfter(initCall, rollbackIl.Create(OpCodes.Call, resetPlayer));
+                rollbackIl.InsertAfter(initCall, rollbackIl.Create(OpCodes.Ldfld, playerIdField));
+                rollbackIl.InsertAfter(initCall, rollbackIl.Create(OpCodes.Ldarg_0));
+
+                System.Console.WriteLine(
+                    $"[SoflanRules] {typeName}::__NoteFeatureRollbackChartLoad added rejection reset hook");
+            }
 
             // (a) calcBPMList 调用前插入 ldarg.0 ldfld _playerID call __SoflanClearPlayer(int)
             var calcBPM = body.Instructions.FirstOrDefault(i => IsCallTo(i, "calcBPMList"));

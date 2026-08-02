@@ -27,6 +27,7 @@ internal static class Program
         {
             TestPureMaiBugMath();
             TestRuntimeChartTimeMath();
+            TestReverseSoflanRegistrationPreservesLaneJudgeOrder();
             TestOneSpeedOriginalParity();
             TestOneSpeedOriginalParityWithRuntimeChartOffset();
             TestMissingRuntimeChartOffsetRegressionEvidence();
@@ -109,6 +110,37 @@ internal static class Program
             SoflanRuntimeTime.ToRawChartAudioMsec(float.PositiveInfinity, 60f, 0f),
             0f,
             "invalid runtime current fallback");
+    }
+
+    private static void TestReverseSoflanRegistrationPreservesLaneJudgeOrder()
+    {
+        // 016800_01.ma2 group 13, lane 0. Extreme reverse speed makes the
+        // visual registration order differ from the original note order.
+        var registrationOrder = new[] { 192, 216, 360, 240, 336, 264, 312, 288 };
+        var expectedJudgeOrder = new[] { 192, 216, 240, 264, 288, 312, 336, 360 };
+        var siblingNoteIndices = new List<int>();
+
+        for (var i = 0; i < registrationOrder.Length; i++)
+        {
+            var noteIndex = registrationOrder[i];
+            var siblingIndex = SoflanJudgeOrder.GetSiblingIndex(
+                noteIndex,
+                siblingNoteIndices.Count,
+                index => siblingNoteIndices[index]);
+            siblingNoteIndices.Insert(siblingIndex, noteIndex);
+        }
+
+        var actualJudgeOrder = new List<int>();
+        while (siblingNoteIndices.Count > 0)
+        {
+            var judgeHeadIndex = siblingNoteIndices.Count - 1;
+            actualJudgeOrder.Add(siblingNoteIndices[judgeHeadIndex]);
+            siblingNoteIndices.RemoveAt(judgeHeadIndex);
+        }
+
+        Require(actualJudgeOrder.SequenceEqual(expectedJudgeOrder),
+            "reverse Soflan registration changed the lane judgment order: "
+            + string.Join(",", actualJudgeOrder));
     }
 
     private static void TestOneSpeedOriginalParity()
