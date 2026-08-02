@@ -39,6 +39,7 @@ internal static class Program
             TestAdjustmentCrossesSoflanBoundaryExactly();
             TestGroupsRemainIndependent();
             TestVisibilityUsesAdjustedSoflanTime();
+            TestRegistrationPolicyUsesNormalWindowWhenUltraFastSoflanWindowIsSkipped();
             TestComplexTimelineTranslationInvariance();
             TestComplexVisibilityTranslationInvariance();
             TestTwoPlayerRuntimeChartOffsetsRemainIndependent();
@@ -495,6 +496,71 @@ internal static class Program
             scratch);
         Require(!Contains(output, noteMsec),
             "disabled-adjustment visibility registered the note before the raw window start");
+    }
+
+    private static void TestRegistrationPolicyUsesNormalWindowWhenUltraFastSoflanWindowIsSkipped()
+    {
+        const float ultraFastSpeed = 100001f;
+        const float normalVisibleMsec = 600f;
+        var bpmList = new BpmList { FirstBpm = Bpm };
+        var soflanList = new SoflanList();
+        soflanList.Add(new Soflan
+        {
+            TGrid = new TGrid(0, 0),
+            EndTGrid = new TGrid(8, 0),
+            Speed = ultraFastSpeed,
+            SoflanGroup = 40
+        });
+
+        float noteMsec = 4f * BarMsec;
+        float sampledCurrentMsec = noteMsec + 8f;
+        double sampledCurrentY = TGridCalculator.ConvertAudioTimeToY_PreviewMode(
+            TimeSpan.FromMilliseconds(sampledCurrentMsec),
+            soflanList,
+            bpmList,
+            1);
+        var output = new List<SoflanList.VisibleMsecRange>();
+        soflanList.FillVisibleMsecRangesForGamePreview(
+            sampledCurrentY,
+            normalVisibleMsec,
+            bpmList,
+            output,
+            new SoflanList.VisibleRangeQueryScratch());
+
+        var soflanVisible = Contains(output, noteMsec);
+        Require(!soflanVisible,
+            "100001x Soflan window should be skipped by an 8ms-late frame sample");
+        Require(normalVisibleMsec / ultraFastSpeed < 0.01f,
+            "100001x visual window should be shorter than 0.01ms");
+        Require(
+            SoflanVisibilityPolicy.ShouldRegisterNote(
+                soflanVisible,
+                sampledCurrentMsec,
+                noteMsec,
+                normalVisibleMsec),
+            "normal registration window should recover a skipped ultra-fast Soflan note");
+
+        Require(
+            !SoflanVisibilityPolicy.ShouldRegisterNote(
+                false,
+                noteMsec - normalVisibleMsec - 1f,
+                noteMsec,
+                normalVisibleMsec),
+            "note should remain blocked before both registration windows");
+        Require(
+            SoflanVisibilityPolicy.ShouldRegisterNote(
+                false,
+                noteMsec - normalVisibleMsec,
+                noteMsec,
+                normalVisibleMsec),
+            "normal registration window should include its exact start boundary");
+        Require(
+            SoflanVisibilityPolicy.ShouldRegisterNote(
+                true,
+                noteMsec - normalVisibleMsec - 1f,
+                noteMsec,
+                normalVisibleMsec),
+            "early Soflan visibility should still register before the normal window");
     }
 
     private static void TestComplexTimelineTranslationInvariance()
