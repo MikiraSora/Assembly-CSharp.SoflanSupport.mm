@@ -51,20 +51,29 @@ namespace Monitor.Game
                 currentMsec,
                 maiBugAdjustMsec,
                 noteSoflanGroup);
-            var visible = soflanManager.checkNoteVisible(
+            var soflanVisible = soflanManager.checkNoteVisible(
                     monitorIndex,
                     note,
                     currentMsec,
                     visibleMsec,
                     noteSoflanGroup,
                     soflanTime);
+            // 极高速 Soflan 的视觉窗口可能短于一帧。与原版注册窗口取并集，
+            // 保证物件仍会进入实际判定或 TooLate 清理，不让结算等待未注册 note。
+            var visible = SoflanVisibilityPolicy.ShouldRegisterNote(
+                soflanVisible,
+                currentMsec,
+                note.time.msec,
+                num);
             SoflanDiagnostic.VisibilityDecision(
                 monitorIndex,
                 note,
                 currentMsec,
                 visibleMsec,
+                num,
                 noteSoflanGroup,
                 soflanTime,
+                soflanVisible,
                 visible);
             if (!visible)
                 return 2;

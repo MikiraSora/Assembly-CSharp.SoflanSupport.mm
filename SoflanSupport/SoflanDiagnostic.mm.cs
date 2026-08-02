@@ -275,8 +275,10 @@ namespace SoflanSupport
             NoteData note,
             float runtimeMsec,
             float visibleMsec,
+            float normalVisibleMsec,
             int soflanGroup,
             float currentSoflanTime,
+            bool soflanVisible,
             bool visible)
         {
             if (note == null || !TryGetActivePlayer(playerId, out var state))
@@ -304,7 +306,7 @@ namespace SoflanSupport
                     soflanGroup);
                 Write(
                     "VISIBILITY",
-                    $"player={playerId} note={note.indexNote} kind={note.type.getEnum()} lane={note.startButtonPos} runtimeMsec={F(runtimeMsec)} rawCurrentMsec={F(rawCurrentMsec)} runtimeNoteMsec={F(note.time.msec)} rawNoteMsec={F(rawNoteMsec)} visibleMsec={F(visibleMsec)} normalDue={B(runtimeMsec >= note.time.msec - visibleMsec)} group={soflanGroup} speed={D(manager.GetCurrentSpeed(playerId, soflanGroup, runtimeMsec))} currentSoflan={F(currentSoflanTime)} noteSoflan={F(noteSoflanTime)} soflanDiff={F(noteSoflanTime - currentSoflanTime)} decision={(visible ? "VISIBLE" : "BLOCKED")}");
+                    $"player={playerId} note={note.indexNote} kind={note.type.getEnum()} lane={note.startButtonPos} runtimeMsec={F(runtimeMsec)} rawCurrentMsec={F(rawCurrentMsec)} runtimeNoteMsec={F(note.time.msec)} rawNoteMsec={F(rawNoteMsec)} visibleMsec={F(visibleMsec)} normalVisibleMsec={F(normalVisibleMsec)} normalDue={B(SoflanVisibilityPolicy.IsNormallyDue(runtimeMsec, note.time.msec, normalVisibleMsec))} soflanVisible={B(soflanVisible)} group={soflanGroup} speed={D(manager.GetCurrentSpeed(playerId, soflanGroup, runtimeMsec))} currentSoflan={F(currentSoflanTime)} noteSoflan={F(noteSoflanTime)} soflanDiff={F(noteSoflanTime - currentSoflanTime)} decision={(visible ? "VISIBLE" : "BLOCKED")}");
             }
             catch (Exception ex)
             {
