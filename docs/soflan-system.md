@@ -333,6 +333,15 @@ note.time.msec 是否落在任意 visible range 内
 
 这样即使 Soflan 时间轴反向或折返，只要某个 note 的原始音频时间在当前视觉窗口对应的任何范围里，它就能被注册出来。
 
+运行时最终使用 Soflan 可见范围与原版注册窗口的并集：
+
+```csharp
+shouldRegister = soflanVisible
+    || currentMsec >= note.time.msec - normalVisibleMsec;
+```
+
+其中 `normalVisibleMsec` 是原版按玩家物件速度计算的注册提前量。第二项是生命周期安全网：像 `100001x` 这样的极高速区间会把 `600ms` 的视觉窗口压缩到约 `0.006ms`，正常帧采样可能直接跨过整个窗口。进入原版注册窗口后仍会创建该物件，使它按真实音频时间判定或进入 TooLate 清理；物件位置、缩放和判定窗口本身仍不受这项安全网修改。
+
 ### 缓存策略
 
 为了避免每帧遍历所有 group，当前实现是懒计算：

@@ -56,7 +56,7 @@ dpSoflanSupport.log
 | `SESSION_BEGIN` / `SESSION_READY` | 谱面路径、是否含 SFL、运行时 ChartOffset |
 | `SOFLAN_LOAD` / `NOTE_LOAD` | 原始 SFL 行；每个 note 的类型、轨道、触摸区、头尾时间、group 与 FixedSoflan |
 | `INPUT` | 八个物理按键和 34 个触摸区的 DOWN/UP、原始/游戏输入状态、占用状态和持续时间 |
-| `VISIBILITY` | 原版毫秒条件与 Soflan 可见性结果、当前倍率、raw/runtime 时间、Soflan 时间差 |
+| `VISIBILITY` | 原版毫秒条件、纯 Soflan 可见性与最终注册结果、当前倍率、raw/runtime 时间、Soflan 时间差 |
 | `VISIBILITY_FALLBACK` | Slide、TouchHold 等不使用 Soflan 视觉分支的物件 |
 | `REGISTER_ATTEMPT` / `REGISTER_RESULT` | 对象池注册时机及成功/失败；失败期间按 250ms 心跳采样 |
 | `SKIP_REGISTER` | 对象未生成而由 `SkipRegistNote` 直接提交 TooLate 的路径 |

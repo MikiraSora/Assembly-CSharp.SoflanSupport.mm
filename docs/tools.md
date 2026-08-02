@@ -158,6 +158,7 @@ dotnet run --project .\tools\SoflanMaiBugTests\SoflanMaiBugTests.csproj -c Relea
 - 非零 `GetAdjustMSec()` 还原及缺失偏移的回归证据。
 - 恒定加速/减速、停车、反向和跨 SFL 边界。
 - group 独立、可见范围、复杂轨迹平移不变性。
+- `100001x` 等亚帧视觉窗口被跳过时，原版注册窗口仍能接管 note 生命周期。
 - 两个玩家使用不同运行时 chart offset 时的隔离。
 
 可选真实谱面参数顺序是“复杂 SFL 谱面、无 SFL 或恒定 1x 基线谱面”：
