@@ -34,6 +34,9 @@
     <Compile Remove="tmp_ma2_export_check\**\*.cs" />
     <None Remove="tmp_ma2_export_check\**" />
     <ProjectReference Remove="tmp_ma2_export_check\**" />
+    <Compile Remove="tmp_vis_check\**\*.cs" />
+    <None Remove="tmp_vis_check\**" />
+    <ProjectReference Remove="tmp_vis_check\**" />
   </ItemGroup>
 
   <ItemGroup>
